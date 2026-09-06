@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=bnm
+GenericName=Network Manager
+Comment=Wi-Fi, VPNs and network quality in one place
+Exec=bnm-desktop
+Icon=bnm
+Terminal=false
+Categories=Network;Settings;System;
+Keywords=network;wifi;vpn;tailscale;wireguard;speed;
+StartupNotify=true

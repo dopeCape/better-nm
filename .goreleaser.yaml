@@ -1,0 +1,102 @@
+version: 2
+project_name: bnm
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: bnm
+    main: ./cmd/bnm
+    binary: bnm
+    env: [CGO_ENABLED=0]
+    goos: [linux]
+    goarch: [amd64, arm64]
+    flags: [-trimpath]
+    ldflags: ["-s -w -X github.com/dopeCape/better-nm/internal/version.Version={{.Version}}"]
+  - id: bnmd
+    main: ./cmd/bnmd
+    binary: bnmd
+    env: [CGO_ENABLED=0]
+    goos: [linux]
+    goarch: [amd64, arm64]
+    flags: [-trimpath]
+    ldflags: ["-s -w -X github.com/dopeCape/better-nm/internal/version.Version={{.Version}}"]
+
+archives:
+  - id: tarball
+    ids: [bnm, bnmd]
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    files:
+      - LICENSE
+      - README.md
+      - packaging/systemd/bnmd.service
+
+nfpms:
+  - id: packages
+    package_name: bnm
+    ids: [bnm, bnmd]
+    vendor: dopeCape
+    homepage: https://github.com/dopeCape/better-nm
+    maintainer: dopeCape <dopeCape@users.noreply.github.com>
+    description: NetworkManager front end with unified VPN control and network-quality monitoring (CLI + TUI + daemon).
+    license: MIT
+    formats: [deb, rpm, archlinux]
+    bindir: /usr/bin
+    dependencies:
+      - networkmanager
+    recommends:
+      - libnotify
+    contents:
+      - src: packaging/systemd/bnmd.service
+        dst: /usr/lib/systemd/user/bnmd.service
+      - src: packaging/sysctl/50-bnm.conf
+        dst: /usr/lib/sysctl.d/50-bnm.conf
+      - src: packaging/nfpm/90-bnm.preset
+        dst: /usr/lib/systemd/user-preset/90-bnm.preset
+        packager: rpm
+    scripts:
+      postinstall: packaging/nfpm/postinstall.sh
+    overrides:
+      deb:
+        dependencies: [network-manager]
+      archlinux:
+        dependencies: [networkmanager]
+    archlinux:
+      packager: dopeCape <dopeCape@users.noreply.github.com>
+
+# AUR publishing needs the AUR_KEY secret (an SSH private key registered on the maintainer's AUR account).
+# The release workflow skips this block when the secret is absent.
+aurs:
+  - name: bnm-bin
+    ids: [tarball]
+    homepage: https://github.com/dopeCape/better-nm
+    description: NetworkManager front end with unified VPN control and network-quality monitoring
+    maintainers: ["dopeCape <dopeCape@users.noreply.github.com>"]
+    license: MIT
+    private_key: "{{ .Env.AUR_KEY }}"
+    git_url: ssh://aur@aur.archlinux.org/bnm-bin.git
+    depends: [networkmanager]
+    optdepends: ["libnotify: desktop notifications", "iperf3: self-hosted speed tests"]
+    package: |-
+      install -Dm755 "./bnm" "${pkgdir}/usr/bin/bnm"
+      install -Dm755 "./bnmd" "${pkgdir}/usr/bin/bnmd"
+      install -Dm644 "./packaging/systemd/bnmd.service" "${pkgdir}/usr/lib/systemd/user/bnmd.service"
+      install -Dm644 "./LICENSE" "${pkgdir}/usr/share/licenses/bnm-bin/LICENSE"
+    skip_upload: '{{ if index .Env "AUR_KEY" }}false{{ else }}true{{ end }}'
+
+checksum:
+  name_template: checksums.txt
+
+changelog:
+  sort: asc
+  filters:
+    exclude: ["^docs:", "^test:", "^ci:"]
+
+release:
+  github:
+    owner: dopeCape
+    name: better-nm
+  draft: false
+  prerelease: auto
+  # The AppImage job uploads bnm-desktop-*.AppImage to this release separately.

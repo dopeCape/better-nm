@@ -1,0 +1,53 @@
+name: ci
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Lint
+        run: |
+          go vet ./...
+          test -z "$(gofmt -l .)" || { gofmt -l .; exit 1; }
+      - name: Unit tests
+        run: go test -race -count=1 ./...
+      - name: Integration tests (python-dbusmock NetworkManager template)
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q python3-dbusmock dbus python3-gi
+          BNM_INTEGRATION=1 go test -tags integration -count=1 ./internal/nm/...
+      - name: Build static binaries
+        run: make build
+
+  desktop:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Fyne build deps
+        run: sudo apt-get update -q && sudo apt-get install -y -q gcc libgl1-mesa-dev xorg-dev libxkbcommon-dev libwayland-dev
+      - name: Build desktop app
+        run: make desktop
+
+  nix:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: DeterminateSystems/nix-installer-action@v16
+      - uses: DeterminateSystems/magic-nix-cache-action@v9
+      - name: nix build (keeps vendorHash honest)
+        run: nix build .#bnm --print-build-logs
