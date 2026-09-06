@@ -88,3 +88,29 @@ type Store interface {
 type Notifier interface {
 	Notify(ctx context.Context, e Event) error
 }
+
+// TailscaleControl is the optional extra surface the Tailscale adapter offers.
+// The daemon type-asserts a VPNAdapter to it.
+type TailscaleControl interface {
+	// SetExitNode selects a peer (by ID or name; "" clears) and enables it.
+	SetExitNode(ctx context.Context, peer string, allowLAN bool) error
+	UseExitNode(ctx context.Context, on bool) error
+	SetAcceptDNS(ctx context.Context, on bool) error
+	// Login starts an interactive login and returns the URL to open.
+	Login(ctx context.Context) (url string, err error)
+	Logout(ctx context.Context) error
+}
+
+// SpeedTester runs an on-demand bandwidth test.
+type SpeedTester interface {
+	Run(ctx context.Context, opts SpeedOptions, progress func(SpeedProgress)) (SpeedResult, error)
+}
+
+// SpeedOptions selects the provider and bounds the test.
+type SpeedOptions struct {
+	Provider   string `json:"provider,omitempty"` // cloudflare (default) | iperf3 | librespeed
+	Server     string `json:"server,omitempty"`   // iperf3 host[:port] or librespeed base URL
+	Quick      bool   `json:"quick,omitempty"`    // ~10% of the bytes
+	MaxBytes   int64  `json:"max_bytes,omitempty"`
+	NetworkKey string `json:"network_key,omitempty"`
+}
