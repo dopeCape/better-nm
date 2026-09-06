@@ -2,3 +2,5 @@
 /dist/
 *.test
 .scratch/
+.claude/worktrees/
+result
