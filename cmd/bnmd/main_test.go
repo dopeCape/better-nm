@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/dopeCape/better-nm/internal/client"
+	"github.com/dopeCape/better-nm/internal/config"
 	"github.com/dopeCape/better-nm/internal/core"
 )
 
@@ -36,18 +37,14 @@ func TestBadFlag(t *testing.T) {
 	}
 }
 
-func TestRealBackendsNotWiredYet(t *testing.T) {
-	dir, _ := os.MkdirTemp("", "bnmd")
-	defer os.RemoveAll(dir)
-	code := run([]string{"--socket", filepath.Join(dir, "s.sock"), "--config", filepath.Join(dir, "c.toml")}, os.Stdout, os.Stderr)
-	if code != 1 {
-		t.Errorf("exit = %d, want 1 until the WIRE block is filled", code)
+func TestPolicyFromConfig(t *testing.T) {
+	n := config.Notify{Connected: true, Degraded: true, MutedNetworks: []string{"wifi:x"}}
+	p := policyFromConfig(n)
+	if !p.Enabled[core.EventConnected] || !p.Enabled[core.EventDegraded] || p.Enabled[core.EventDisconnected] {
+		t.Errorf("enabled map = %v", p.Enabled)
 	}
-	if _, err := newNM(context.Background()); core.KindOf(err) != core.KindUnsupported {
-		t.Errorf("newNM stub = %v", err)
-	}
-	if _, err := openStore(); core.KindOf(err) != core.KindUnsupported {
-		t.Errorf("openStore stub = %v", err)
+	if len(p.MutedNetworks) != 1 || p.MutedNetworks[0] != "wifi:x" {
+		t.Errorf("muted = %v", p.MutedNetworks)
 	}
 }
 

@@ -3,6 +3,7 @@ package daemon
 import (
 	"errors"
 	"fmt"
+	"github.com/dopeCape/better-nm/internal/core"
 	"net"
 	"os"
 	"path/filepath"
@@ -44,6 +45,12 @@ func DefaultSocketPath() string { return paths.Socket() }
 // beside it guarantees a single daemon, a leftover socket nobody answers on is
 // unlinked, and the socket itself is chmod 0600.
 func Listen(path string) (*Socket, error) {
+	// sockaddr_un.sun_path is 108 bytes including the NUL; longer paths fail with
+	// the unhelpful EINVAL, so say what happened.
+	if len(path) > 107 {
+		return nil, core.Errorf(core.KindInvalid, "use a shorter --socket path (under $XDG_RUNTIME_DIR)",
+			"daemon: socket path is %d bytes, Unix sockets allow 107", len(path))
+	}
 	dir := filepath.Dir(path)
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return nil, fmt.Errorf("daemon: create %s: %w", dir, err)

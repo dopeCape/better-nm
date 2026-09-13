@@ -9,10 +9,13 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -20,8 +23,20 @@ import (
 	"github.com/dopeCape/better-nm/internal/config"
 	"github.com/dopeCape/better-nm/internal/core"
 	"github.com/dopeCape/better-nm/internal/daemon"
+	"github.com/dopeCape/better-nm/internal/diag"
 	"github.com/dopeCape/better-nm/internal/fake"
+	"github.com/dopeCape/better-nm/internal/infra"
+	"github.com/dopeCape/better-nm/internal/monitor"
+	"github.com/dopeCape/better-nm/internal/nm"
+	"github.com/dopeCape/better-nm/internal/notify"
+	"github.com/dopeCape/better-nm/internal/paths"
+	"github.com/dopeCape/better-nm/internal/speed"
+	"github.com/dopeCape/better-nm/internal/store"
 	"github.com/dopeCape/better-nm/internal/version"
+	"github.com/dopeCape/better-nm/internal/vpn"
+	"github.com/dopeCape/better-nm/internal/vpn/nmvpn"
+	"github.com/dopeCape/better-nm/internal/vpn/tailscale"
+	"github.com/dopeCape/better-nm/internal/vpn/wireguard"
 )
 
 func main() {
@@ -132,57 +147,116 @@ func fakeOptions() daemon.Options {
 
 // realOptions wires the production backends.
 //
-// WIRE: the orchestrator replaces each stub below with the real constructor once
-// the packages have merged. Expected shapes (see internal/daemon for the
-// interfaces the daemon codes against):
-//
-//	nmClient, err := nm.New(ctx)                                  // core.NetworkManager
-//	st, err := store.Open(filepath.Join(paths.StateDir(), "bnm.db")) // core.Store
-//	ts := tailscale.New(cfg.Tailscale.Socket)                      // core.VPNAdapter + core.TailscaleControl
-//	wg := wireguard.New(nmClient)                                  // core.VPNAdapter + Import(ctx, name, io.Reader)
-//	ov := nmvpn.New(nmClient)                                      // core.VPNAdapter
-//	reg := vpn.NewRegistry(ts, wg, ov)                             // daemon.VPNRegistry (List/Connect/Disconnect/Watch/Tailscale)
-//	mon := monitor.New(monitorConfig(cfg), st, prober, logger)     // daemon.Monitor
-//	sp := speed.New(cfg.Speed.Provider)                            // core.SpeedTester
-//	nt := notify.New(cfg.Notify, logger)                           // core.Notifier (+ optional SetPolicy(config.Notify))
-//	dg := daemon.DiagFuncs{LANHostsFn: diag.LANHosts, ListeningPortsFn: diag.ListeningPorts,
-//	      RoutesFn: diag.Routes, DNSLookupFn: diag.DNSLookup, PublicIPFn: diag.PublicIP, InfraFn: infra.Networks}
-//
-// If a real constructor's signature differs from the daemon interface (for
-// example Registry.Tailscale returning (core.TailscaleControl, bool), or
-// wireguard.Import returning something other than (uuid string, error)), add a
-// two-line adapter type here rather than changing the daemon.
+// realOptions wires the production backends. Everything runs unprivileged: NM over
+// the system bus with polkit, Tailscale via its LocalAPI socket, WireGuard and plugin
+// VPNs as NM profiles, probes on ping sockets (TCP fallback), history in SQLite.
 func realOptions(ctx context.Context, cfg config.Config, logger *slog.Logger) (daemon.Options, error) {
-	_ = ctx
-	_ = cfg
-	_ = logger
-	nmClient, err := newNM(ctx)
+	nmClient, err := nm.New(ctx, nm.WithLogger(logger))
 	if err != nil {
-		return daemon.Options{}, err
+		return daemon.Options{}, fmt.Errorf("connect to NetworkManager: %w", err)
 	}
-	st, err := openStore()
+	stateDir := paths.StateDir()
+	if err := os.MkdirAll(stateDir, 0o700); err != nil {
+		return daemon.Options{}, fmt.Errorf("state dir: %w", err)
+	}
+	retention := time.Duration(cfg.Monitor.RetentionDays) * 24 * time.Hour
+	st, err := store.Open(filepath.Join(stateDir, "bnm.db"), store.WithRetention(retention))
 	if err != nil {
-		return daemon.Options{}, err
+		return daemon.Options{}, fmt.Errorf("open store: %w", err)
 	}
+
+	ts := tailscale.NewAdapter(tailscale.New(cfg.Tailscale.Socket), logger)
+	wg := wireguard.NewAdapter(nmClient, logger)
+	ov := nmvpn.NewAdapter(nmClient, logger)
+	reg := vpn.NewRegistry(ts, wg, ov)
+
+	mon := monitor.New(monitor.Config{
+		Interval: cfg.Monitor.Interval,
+		Anchors:  cfg.Monitor.Anchors,
+	}, st, monitor.NewAutoProber(logger), logger)
+
+	nt := &policyNotifier{Notifier: notify.New(policyFromConfig(cfg.Notify), logger)}
+
 	return daemon.Options{
-		NM:    nmClient,
-		Store: st,
-		// WIRE: VPN, Monitor, Speed, Notifier, Diag, WireGuard go here.
+		NM:        nmClient,
+		Store:     st,
+		VPN:       reg,
+		Monitor:   monitorRunner{mon},
+		Speed:     speed.New(cfg.Speed.Provider),
+		Notifier:  nt,
+		WireGuard: wgImporter{wg},
+		Diag: daemon.DiagFuncs{
+			LANHostsFn:       diag.LANHosts,
+			ListeningPortsFn: diag.ListeningPorts,
+			RoutesFn:         diag.Routes,
+			DNSLookupFn:      diag.DNSLookup,
+			PublicIPFn:       diag.PublicIP,
+			InfraFn:          infra.Networks,
+		},
 	}, nil
 }
 
-// WIRE: replace with nm.New(ctx).
-func newNM(ctx context.Context) (core.NetworkManager, error) {
-	return nil, errNotWired("internal/nm")
+// policyFromConfig maps the TOML notification section onto the notifier's policy.
+func policyFromConfig(n config.Notify) notify.Policy {
+	p := notify.DefaultPolicy()
+	p.Enabled = map[core.EventType]bool{
+		core.EventConnected:        n.Connected,
+		core.EventDisconnected:     n.Disconnected,
+		core.EventNoInternet:       n.NoInternet,
+		core.EventInternetRestored: n.InternetRestored,
+		core.EventVPNUp:            n.VPNUp,
+		core.EventVPNDown:          n.VPNDown,
+		core.EventDegraded:         n.Degraded,
+		core.EventRecovered:        n.Recovered,
+	}
+	p.MutedNetworks = append([]string(nil), n.MutedNetworks...)
+	return p
 }
 
-// WIRE: replace with store.Open(filepath.Join(paths.StateDir(), "bnm.db")).
-func openStore() (core.Store, error) {
-	return nil, errNotWired("internal/store")
+// policyNotifier lets PUT /config swap the policy at runtime (daemon.PolicyUpdater).
+type policyNotifier struct {
+	mu sync.Mutex
+	*notify.Notifier
+	logger *slog.Logger
 }
 
-func errNotWired(pkg string) error {
-	return core.Errorf(core.KindUnsupported, "run `bnmd --fake` for the in-memory world", "bnmd: %s is not wired yet", pkg)
+func (p *policyNotifier) Notify(ctx context.Context, e core.Event) error {
+	p.mu.Lock()
+	n := p.Notifier
+	p.mu.Unlock()
+	return n.Notify(ctx, e)
+}
+
+// Deliver bypasses the filter (used by POST /notify/test).
+func (p *policyNotifier) Deliver(ctx context.Context, e core.Event) error {
+	p.mu.Lock()
+	n := p.Notifier
+	p.mu.Unlock()
+	return n.Deliver(ctx, e)
+}
+
+func (p *policyNotifier) SetPolicy(n config.Notify) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.Notifier.Filter().Flush()
+	p.Notifier = notify.New(policyFromConfig(n), p.logger)
+}
+
+// monitorRunner adapts monitor.Monitor.Run (no error) to daemon.Monitor.
+type monitorRunner struct{ *monitor.Monitor }
+
+func (m monitorRunner) Run(ctx context.Context) error {
+	m.Monitor.Run(ctx)
+	return nil
+}
+
+// wgImporter adapts wireguard.Adapter.Import (which also returns the parsed spec)
+// to the daemon's narrower interface.
+type wgImporter struct{ a *wireguard.Adapter }
+
+func (w wgImporter) Import(ctx context.Context, name string, conf io.Reader) (string, error) {
+	uuid, _, err := w.a.Import(ctx, name, conf)
+	return uuid, err
 }
 
 func parseLevel(s string) slog.Level {

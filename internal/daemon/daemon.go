@@ -1145,6 +1145,13 @@ func (d *Daemon) NotifyTest(ctx context.Context) error {
 		Title: "bnm notifications work", Body: "This is a test notification from bnmd.", Urgency: "low",
 		Data: map[string]string{"test": "true"},
 	}
+	// A Notifier that can bypass its own filter (debounce, rate limit, mutes)
+	// should, so "bnm notify test" always shows something.
+	if dl, ok := d.o.Notifier.(interface {
+		Deliver(context.Context, core.Event) error
+	}); ok {
+		return dl.Deliver(ctx, e)
+	}
 	return d.o.Notifier.Notify(ctx, e)
 }
 
