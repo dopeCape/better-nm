@@ -8,5 +8,5 @@
 - No goroutine leaks: everything long-running takes a `context.Context` and stops when it ends. Watch channels are buffered and drop-on-full (never block a producer).
 - Unprivileged always: never call sudo/pkexec; when a capability is missing, return a typed error with a human hint (what one-time step fixes it).
 - Docs: a package comment at the top of one file saying what the package owns and how it is tested.
-- Git: work on the branch named in your task, commit as `git -c user.name=dopeCape -c user.email=dopeCape@users.noreply.github.com commit`, end messages with `Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>`. Push with plain `git push -u origin <branch>` (a repo-local credential helper handles auth). Never run `gh auth switch`; prefix `gh` with `GH_TOKEN=$(gh auth token --user dopeCape)`.
+- Git: work on the branch named in your task, commit as `git -c user.name=dopeCape -c user.email=dopeCape@users.noreply.github.com commit`, end messages with `Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>`. Push with plain `git push -u origin <branch>` (a repo-local credential helper handles auth). Never run `gh auth switch`; prefix `gh` with `GH_TOKEN=$(gh auth token --user dopeCape)`.
 - Do not edit files outside the packages your task names, except `go.mod`/`go.sum` via `go get`.
