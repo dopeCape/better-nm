@@ -23,7 +23,7 @@
           pname = "bnm";
           inherit version;
           src = ./.;
-          vendorHash = "sha256-47Sy2SQp63A3rZuNjKV6BDHtVNfFMiqbtHEr03Ayrmc=";
+          vendorHash = "sha256-8wVUACQmudCNl7FBrh/qpST7b2NpPVidhEql3rUhRak=";
           subPackages = [ "cmd/bnm" "cmd/bnmd" ];
           env.CGO_ENABLED = 0;
           ldflags = [ "-s" "-w" "-X github.com/dopeCape/better-nm/internal/version.Version=${version}" ];
@@ -37,7 +37,7 @@
           pname = "bnm-desktop";
           inherit version;
           src = ./.;
-          vendorHash = "sha256-47Sy2SQp63A3rZuNjKV6BDHtVNfFMiqbtHEr03Ayrmc=";
+          vendorHash = "sha256-8wVUACQmudCNl7FBrh/qpST7b2NpPVidhEql3rUhRak=";
           subPackages = [ "cmd/bnm-desktop" ];
           nativeBuildInputs = [ pkgs.pkg-config ];
           buildInputs = guiLibs;

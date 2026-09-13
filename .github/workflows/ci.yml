@@ -16,6 +16,8 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
+      - name: Fyne build deps (the desktop package is cgo)
+        run: sudo apt-get update -q && sudo apt-get install -y -q gcc libgl1-mesa-dev xorg-dev libxkbcommon-dev libwayland-dev
       - name: Lint
         run: |
           go vet ./...
@@ -24,7 +26,6 @@ jobs:
         run: go test -race -count=1 ./...
       - name: Integration tests (python-dbusmock NetworkManager template)
         run: |
-          sudo apt-get update -q
           sudo apt-get install -y -q python3-dbusmock dbus python3-gi
           BNM_INTEGRATION=1 go test -tags integration -count=1 ./internal/nm/...
       - name: Build static binaries
