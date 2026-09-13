@@ -280,7 +280,7 @@ func (p *progress) update(sp core.SpeedProgress) {
 	}
 	line := strings.TrimRight(fmt.Sprintf("%s %s %3.0f%%  %s", u.cyan.Render(label), bar, sp.Percent, rate), " ")
 	if p.live {
-		fmt.Fprintf(p.a.out, "\r\x1b[2K%s", line)
+		fmt.Fprintf(p.a.raw, "\r\x1b[2K%s", line)
 		p.dirty = true
 		return
 	}
@@ -292,7 +292,7 @@ func (p *progress) update(sp core.SpeedProgress) {
 
 func (p *progress) finish() {
 	if p.dirty {
-		fmt.Fprint(p.a.out, "\r\x1b[2K")
+		fmt.Fprint(p.a.raw, "\r\x1b[2K")
 	}
 }
 

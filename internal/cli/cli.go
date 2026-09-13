@@ -40,7 +40,15 @@ const (
 // Run executes bnm with args (without the program name) and returns the exit
 // code. Output goes to out, diagnostics to errw; in feeds --ask prompts.
 func Run(ctx context.Context, args []string, in io.Reader, out, errw io.Writer) int {
-	a := newApp(in, out, errw)
+	// Everything printed for humans passes through a filter that keeps our
+	// colour codes and drops any other terminal control (see safe.go); the
+	// raw writers stay for TTY detection and the progress bar's own cursor
+	// moves.
+	sout, serr := newSafeWriter(out), newSafeWriter(errw)
+	defer sout.Flush()
+	defer serr.Flush()
+	a := newApp(in, sout, serr)
+	a.raw = out
 	root := a.rootCmd()
 	root.SetArgs(args)
 	root.SetIn(in)
@@ -62,19 +70,19 @@ func Run(ctx context.Context, args []string, in io.Reader, out, errw io.Writer) 
 		return code
 	}
 	if code == ExitUsage {
-		fmt.Fprintf(errw, "error: %s\n", strings.TrimPrefix(err.Error(), "error: "))
+		fmt.Fprintf(serr, "error: %s\n", strings.TrimPrefix(err.Error(), "error: "))
 		c := a.usageCmd
 		if c == nil {
 			c = root
 		}
-		fmt.Fprintf(errw, "usage: %s\n", c.UseLine())
-		fmt.Fprintf(errw, "hint: run `%s --help`\n", c.CommandPath())
+		fmt.Fprintf(serr, "usage: %s\n", c.UseLine())
+		fmt.Fprintf(serr, "hint: run `%s --help`\n", c.CommandPath())
 		return code
 	}
 	msg := errorMessage(err)
-	fmt.Fprintf(errw, "error: %s\n", msg)
+	fmt.Fprintf(serr, "error: %s\n", msg)
 	if hint := hintFor(err); hint != "" {
-		fmt.Fprintf(errw, "hint: %s\n", hint)
+		fmt.Fprintf(serr, "hint: %s\n", hint)
 	}
 	return code
 }
@@ -82,8 +90,9 @@ func Run(ctx context.Context, args []string, in io.Reader, out, errw io.Writer) 
 // app is one invocation: global flags, IO and the lazily connected client.
 type app struct {
 	in   io.Reader
-	out  io.Writer
-	errw io.Writer
+	out  io.Writer // filtered stdout (safeWriter)
+	errw io.Writer // filtered stderr
+	raw  io.Writer // stdout as given: for TTY detection and the progress bar
 
 	jsonOut     bool
 	noColor     bool
@@ -204,7 +213,7 @@ unreachable, 4 permission denied.`,
 			if os.Getenv("NO_COLOR") != "" {
 				a.noColor = true
 			}
-			a.ui = newUI(a.out, a.noColor)
+			a.ui = newUI(a.raw, a.noColor)
 			return nil
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
