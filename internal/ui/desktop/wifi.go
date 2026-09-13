@@ -9,6 +9,7 @@ import (
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
+	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 
@@ -59,6 +60,7 @@ type wifiView struct {
 	username    *widget.Entry
 	connectBtn  *widget.Button
 	forgetBtn   *widget.Button
+	confirm     *dialog.ConfirmDialog // the open "Forget?" dialog, for tests
 	autoconnect *widget.Check
 	actErr      *errorLabel
 	ipMethod    *widget.Select
@@ -426,13 +428,28 @@ func (v *wifiView) connect() {
 	})
 }
 
+// forget asks first: deleting a profile throws away its password and
+// settings, and the button sits next to Connect.
 func (v *wifiView) forget() {
 	n, ok := v.current()
 	if !ok || n.ProfileUUID == "" {
 		return
 	}
+	uuid, ssid := n.ProfileUUID, n.SSID
+	d := dialog.NewConfirm("Forget "+ssid+"?", "The saved password and settings for "+ssid+" are deleted. You can join it again later.", func(yes bool) {
+		v.confirm = nil
+		if yes {
+			v.forgetConfirmed(uuid)
+		}
+	}, v.a.win)
+	d.SetConfirmText("Forget")
+	d.SetDismissText("Keep")
+	v.confirm = d
+	d.Show()
+}
+
+func (v *wifiView) forgetConfirmed(uuid string) {
 	v.actErr.set(nil)
-	uuid := n.ProfileUUID
 	v.a.bg(func(ctx context.Context) {
 		if err := v.a.c.ForgetWifi(ctx, uuid); err != nil {
 			v.a.onUI(func() { v.actErr.set(err) })

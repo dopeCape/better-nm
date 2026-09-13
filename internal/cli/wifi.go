@@ -169,12 +169,18 @@ func (a *app) wifiConnectCmd() *cobra.Command {
 			}
 			// Work out whether a password is needed before we hit NM, so the
 			// prompt appears only when it makes sense.
-			var seen *core.WifiNetwork
-			if nets, err := c.Wifi(ctx, device); err == nil {
-				for i := range nets {
-					if nets[i].SSID == ssid {
-						seen = &nets[i]
-						break
+			seen := a.wifiSeen(ctx, c, device, ssid)
+			if seen == nil && !hidden {
+				// NM treats an SSID it cannot see as hidden and keeps the
+				// profile it creates even when nothing answers, so a typo
+				// would leave a junk profile behind. Rescan once, then refuse
+				// unless a saved profile exists (NM can retry that itself).
+				if !a.wifiProfileExists(ctx, c, ssid) {
+					if err := a.rescan(ctx, c, device); err != nil {
+						return err
+					}
+					if seen = a.wifiSeen(ctx, c, device, ssid); seen == nil {
+						return core.Errorf(core.KindNotFound, "check `bnm wifi list`, or pass --hidden if the network does not broadcast its name", "%q is not in range", ssid)
 					}
 				}
 			}
@@ -201,6 +207,35 @@ func (a *app) wifiConnectCmd() *cobra.Command {
 	cmd.Flags().BoolVar(&hidden, "hidden", false, "the network does not broadcast its SSID")
 	cmd.Flags().StringVar(&device, "device", "", "Wi-Fi device to use (default: the first)")
 	return cmd
+}
+
+// wifiSeen returns the network called ssid in the daemon's current scan
+// results for device ("" = any), or nil when it is not in range.
+func (a *app) wifiSeen(ctx context.Context, c *client.Client, device, ssid string) *core.WifiNetwork {
+	nets, err := c.Wifi(ctx, device)
+	if err != nil {
+		return nil
+	}
+	for i := range nets {
+		if nets[i].SSID == ssid {
+			return &nets[i]
+		}
+	}
+	return nil
+}
+
+// wifiProfileExists says whether a saved Wi-Fi profile is for ssid.
+func (a *app) wifiProfileExists(ctx context.Context, c *client.Client, ssid string) bool {
+	profiles, err := c.Profiles(ctx)
+	if err != nil {
+		return false
+	}
+	for _, p := range profiles {
+		if p.Type == core.ProfileWifi && (p.SSID == ssid || (p.SSID == "" && p.Name == ssid)) {
+			return true
+		}
+	}
+	return false
 }
 
 func (a *app) stdinIsTerminal() bool {

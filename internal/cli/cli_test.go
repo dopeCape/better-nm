@@ -269,6 +269,23 @@ func TestWifiConnect(t *testing.T) {
 	}
 	r.nm.Fail("ConnectWifi", nil)
 
+	// An SSID that is not in range (after one rescan) is refused before NM
+	// is asked, since NM would treat it as hidden and keep the profile it
+	// creates for it; --hidden says that is intended.
+	r.nm.Fail("ConnectWifi", errors.New("nm must not be asked to connect to an unseen network"))
+	res = r.run("wifi", "connect", "Ghost")
+	if res.code != ExitError {
+		t.Errorf("unseen ssid: exit %d", res.code)
+	}
+	wants(t, res.err, `error: "Ghost" is not in range`, "hint: check `bnm wifi list`, or pass --hidden")
+	if res.out != "" {
+		t.Errorf("stdout should be empty: %q", res.out)
+	}
+	r.nm.Fail("ConnectWifi", nil)
+	res = r.run("wifi", "connect", "Ghost", "--hidden", "--password", "secret12")
+	if res.code != 0 {
+		t.Errorf("--hidden should reach NM: exit %d %s", res.code, res.err)
+	}
 	// Quiet and JSON action output.
 	res = r.ok("wifi", "connect", fake.CafeSSID, "-q")
 	if res.out != "" {
@@ -484,6 +501,31 @@ func TestVPN(t *testing.T) {
 	r.wg.Latency = 150 * time.Millisecond
 	res = r.ok("vpn", "up", "wg-home")
 	wants(t, res.out, "wg-home connected")
+	r.ok("vpn", "down", "wg-home")
+
+	// A backend that accepts the request but ends in "error" is a failed
+	// action in every output mode: -q and --json used to exit 0.
+	const wgID = "44444444-4444-4444-8444-444444444444"
+	r.wg.Latency = 3 * time.Second
+	failSoon := func() {
+		time.AfterFunc(50*time.Millisecond, func() { r.wg.SetState(wgID, core.VPNError) })
+	}
+	for _, flags := range [][]string{nil, {"-q"}, {"--json"}} {
+		failSoon()
+		res = r.run(append([]string{"vpn", "up", "wg-home"}, flags...)...)
+		if res.code != ExitError {
+			t.Errorf("vpn up %v ending in error: exit %d\nstdout %q\nstderr %q", flags, res.code, res.out, res.err)
+		}
+		wants(t, res.err, "error: wg-home failed")
+		if len(flags) == 1 && flags[0] == "-q" && res.out != "" {
+			t.Errorf("-q printed %q", res.out)
+		}
+		if len(flags) == 1 && flags[0] == "--json" && !strings.Contains(res.out, `"state": "error"`) {
+			t.Errorf("--json should still print the final VPN: %q", res.out)
+		}
+		r.wg.SetState(wgID, core.VPNDisconnected)
+	}
+	r.wg.Latency = 0
 }
 
 func TestVPNAddAndTailscale(t *testing.T) {

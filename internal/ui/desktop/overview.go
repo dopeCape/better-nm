@@ -41,7 +41,7 @@ type overviewView struct {
 	events   *fyne.Container
 	loadErr  *errorLabel
 	actErr   *errorLabel
-	seeded   bool
+	seeded   atomic.Bool // read by the fetch goroutine, set on the UI thread
 }
 
 func newOverviewView(a *App) *overviewView { return &overviewView{a: a} }
@@ -87,7 +87,7 @@ func (v *overviewView) refresh() {
 		d.vpns, _ = v.a.c.VPNs(ctx)
 		d.monitor, _ = v.a.c.Monitor(ctx)
 		d.samples, _ = v.a.c.Samples(ctx, "", "gateway", 60)
-		if !v.seeded {
+		if !v.seeded.Load() {
 			d.events, _ = v.a.c.EventHistory(ctx, maxRecentEvents)
 		}
 		return nil
@@ -159,8 +159,8 @@ func (v *overviewView) render(d overviewData) {
 	}
 	v.spark.set(vals, base)
 	// events (history seeds once; live events arrive through setEvents)
-	if !v.seeded && d.events != nil {
-		v.seeded = true
+	if !v.seeded.Load() && d.events != nil {
+		v.seeded.Store(true)
 		v.a.eventsMu.Lock()
 		if len(v.a.events) == 0 {
 			v.a.events = append(v.a.events, d.events...)

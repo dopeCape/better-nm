@@ -431,6 +431,50 @@ func TestVPNToggleSendsRequest(t *testing.T) {
 	h.typeText("/tmp/x.txt")
 	h.key("enter")
 	mustContain(t, h.view(), "expected a .conf")
+	// while the file box has focus the footer must not promise q quits
+	h.key("a")
+	mustNotContain(t, h.view(), "q quit")
+	mustContain(t, h.view(), "ctrl-c quit")
+	h.key("esc")
+	mustNotContain(t, h.view(), "ctrl-c quit")
+}
+
+func TestVPNImportReadsTheFileLocally(t *testing.T) {
+	r := newRig(t)
+	h := newHarness(t, r, 100, 30)
+	h.key("3")
+	dir := t.TempDir()
+	conf := "[Interface]\nPrivateKey = abc=\nAddress = 10.0.0.2/24\n[Peer]\nPublicKey = def=\nEndpoint = vpn.example:51820\nAllowedIPs = 0.0.0.0/0\n"
+	if err := os.WriteFile(filepath.Join(dir, "office.conf"), []byte(conf), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	// The path is relative to the TUI's working directory (which a daemon
+	// running as a service does not share), so the content must be sent inline.
+	t.Chdir(dir)
+	h.key("a")
+	h.typeText("office.conf")
+	h.key("enter")
+	if h.m.vpn.lastErr != nil {
+		t.Fatalf("import: %v", h.m.vpn.lastErr)
+	}
+	ps, _ := r.nm.Profiles(context.Background())
+	found := false
+	for _, p := range ps {
+		if p.Type == core.ProfileWireGuard && p.Name == "office" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("no WireGuard profile named office after import; profiles: %+v", ps)
+	}
+	// a missing file is reported in the flash, not sent to the daemon
+	h.key("a")
+	h.typeText("nope.conf")
+	h.key("enter")
+	mustContain(t, h.view(), "add: open nope.conf")
+	if h.m.vpn.adding {
+		t.Error("the file box should close after enter")
+	}
 }
 
 func TestDisconnectedEventUpdatesStatusBarAndFooter(t *testing.T) {
@@ -683,4 +727,86 @@ func TestProgramLiveStream(t *testing.T) {
 	}, teatest.WithDuration(5*time.Second))
 	tm.Send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("q")})
 	tm.WaitFinished(t, teatest.WithFinalTimeout(5*time.Second))
+}
+
+func TestHostileSSIDCannotSteerTheTerminal(t *testing.T) {
+	r := newRig(t)
+	evil := "Evil\x1b]0;pwned\x07\x1b[2J\rNet31m"
+	r.nm.AddAP(fake.WifiDevice, core.WifiNetwork{SSID: evil, Strength: 40, Security: core.SecOpen, Band: "2.4", Channel: 1})
+	h := newHarness(t, r, 100, 30)
+	v := h.view()
+	for _, bad := range []string{"\x1b]", "\x07", "\x1b[2J", "\r", ""} {
+		if strings.Contains(v, bad) {
+			t.Errorf("frame carries %q", bad)
+		}
+	}
+	mustContain(t, v, "Evil", "Net")
+	// every line of the frame is still exactly the terminal width
+	for i, l := range lines(v) {
+		if w := lipgloss.Width(l); w != 100 {
+			t.Errorf("line %d is %d cells wide: %q", i, w, l)
+		}
+	}
+	// the same name in an event title is safe in the footer and the log
+	r.store.AddEvent(context.Background(), core.Event{Time: time.Now(), Type: core.EventConnected, Title: "Connected to " + evil})
+	h.run(h.m.l.eventHistory())
+	h.key("E")
+	v = h.view()
+	if strings.Contains(v, "\x1b]") || strings.Contains(v, "\x07") {
+		t.Errorf("events overlay carries an escape:\n%s", v)
+	}
+	tests := []struct{ in, want string }{
+		{"plain", "plain"},
+		{"\x1b[32m●\x1b[0m ok", "\x1b[32m●\x1b[0m ok"},
+		{"a\x1b]0;t\x07b", "a]0;tb"},
+		{"a\tb\rc", "abc"},
+		{"x31m", "x31m"},
+		{"two\nlines", "two\nlines"},
+	}
+	for _, tt := range tests {
+		if got := sanitize(tt.in); got != tt.want {
+			t.Errorf("sanitize(%q) = %q, want %q", tt.in, got, tt.want)
+		}
+	}
+}
+
+func TestSpeedCancelAlwaysSettles(t *testing.T) {
+	r := newRig(t)
+	r.speed.Delay = 20 * time.Millisecond
+	h := newHarness(t, r, 100, 30)
+	h.key("5")
+	// The done message used to race the cancelled context, so esc left the
+	// tab "running" about half the time; a few rounds make that reproducible.
+	for i := 0; i < 12; i++ {
+		cmd := h.m.speed.start(h.m, true)
+		if cmd == nil || !h.m.speed.running {
+			t.Fatalf("round %d: test did not start", i)
+		}
+		ch := h.m.speed.ch
+		h.key("esc")
+		done := make(chan struct{})
+		go func() {
+			defer close(done)
+			// drain like the program loop: each message re-arms waitSpeed
+			h.feed(waitSpeed(ch)())
+		}()
+		select {
+		case <-done:
+		case <-time.After(5 * time.Second):
+			t.Fatalf("round %d: the speed channel never delivered a done message", i)
+		}
+		if h.m.speed.running || h.m.speed.cancel != nil || h.m.speed.ch != nil {
+			t.Fatalf("round %d: tab still running after esc", i)
+		}
+		if h.m.speed.lastErr != nil {
+			t.Fatalf("round %d: a cancel is not an error: %v", i, h.m.speed.lastErr)
+		}
+	}
+	mustContain(t, h.view(), "speed test cancelled")
+	// and a fresh run still works afterwards
+	r.speed.Delay = 0
+	h.key("q")
+	if h.m.speed.running || h.m.speed.last == nil {
+		t.Fatalf("run after cancel: running=%v last=%v err=%v", h.m.speed.running, h.m.speed.last, h.m.speed.lastErr)
+	}
 }
