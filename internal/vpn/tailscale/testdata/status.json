@@ -1,0 +1,155 @@
+{
+	"Version": "1.98.10",
+	"TUN": true,
+	"BackendState": "Running",
+	"HaveNodeKey": true,
+	"AuthURL": "",
+	"TailscaleIPs": [
+		"100.64.0.10",
+		"fd7a:115c:a1e0::aa2d:3433"
+	],
+	"Self": {
+		"ID": "nDDAL5zcst11CNTRL",
+		"PublicKey": "nodekey:9e94112f940dda46a65594a06a2cde627d7e0c84db2a78682bc94a00aa933432",
+		"HostName": "nixos",
+		"DNSName": "nixos-1.tailabc12.ts.net.",
+		"OS": "linux",
+		"UserID": 935598283501435,
+		"TailscaleIPs": [
+			"100.64.0.10",
+			"fd7a:115c:a1e0::aa2d:3433"
+		],
+		"AllowedIPs": [
+			"100.64.0.10/32",
+			"fd7a:115c:a1e0::aa2d:3433/128"
+		],
+		"Addrs": [
+			"192.168.1.73:41641"
+		],
+		"CurAddr": "",
+		"Relay": "blr",
+		"PeerRelay": "",
+		"RxBytes": 0,
+		"TxBytes": 0,
+		"Created": "2026-09-06T17:17:20.307673113Z",
+		"LastWrite": "0001-01-01T00:00:00Z",
+		"LastSeen": "0001-01-01T00:00:00Z",
+		"LastHandshake": "0001-01-01T00:00:00Z",
+		"Online": true,
+		"ExitNode": false,
+		"ExitNodeOption": false,
+		"Active": false,
+		"PeerAPIURL": [
+			"http://100.64.0.10:60300"
+		],
+		"TaildropTarget": 0,
+		"NoFileSharingReason": "",
+		"Capabilities": [
+			"https://tailscale.com/cap/is-admin"
+		],
+		"CapMap": {
+			"default-auto-update": [
+				false
+			]
+		},
+		"InNetworkMap": true,
+		"InMagicSock": false,
+		"InEngine": false,
+		"KeyExpiry": "2027-03-05T17:17:20Z"
+	},
+	"Health": [],
+	"MagicDNSSuffix": "tailabc12.ts.net",
+	"CurrentTailnet": {
+		"Name": "user@example.com",
+		"MagicDNSSuffix": "tailabc12.ts.net",
+		"MagicDNSEnabled": true
+	},
+	"CertDomains": [
+		"nixos-1.tailabc12.ts.net"
+	],
+	"Peer": {
+		"nodekey:1aecad8ae657c9836987a4360d8c5d7adf180a26f1bab5d7b1ff203328654622": {
+			"ID": "nF7Q2vXCNTRL",
+			"PublicKey": "nodekey:1aecad8ae657c9836987a4360d8c5d7adf180a26f1bab5d7b1ff203328654622",
+			"HostName": "nixos",
+			"DNSName": "nixos.tailabc12.ts.net.",
+			"OS": "linux",
+			"UserID": 935598283501435,
+			"TailscaleIPs": [
+				"100.64.0.11",
+				"fd7a:115c:a1e0::2832:4623"
+			],
+			"AllowedIPs": [
+				"100.64.0.11/32",
+				"fd7a:115c:a1e0::2832:4623/128",
+				"0.0.0.0/0",
+				"::/0"
+			],
+			"Addrs": null,
+			"CurAddr": "",
+			"Relay": "blr",
+			"PeerRelay": "",
+			"RxBytes": 0,
+			"TxBytes": 0,
+			"Created": "2026-07-25T15:33:16.4Z",
+			"LastWrite": "0001-01-01T00:00:00Z",
+			"LastSeen": "2026-09-07T23:05:37.1Z",
+			"LastHandshake": "0001-01-01T00:00:00Z",
+			"Online": false,
+			"ExitNode": false,
+			"ExitNodeOption": true,
+			"Active": false,
+			"TaildropTarget": 0,
+			"NoFileSharingReason": "",
+			"InNetworkMap": true,
+			"InMagicSock": true,
+			"InEngine": false,
+			"KeyExpiry": "2027-01-21T15:33:16Z"
+		},
+		"nodekey:9615ab7460f029236f358a8ae32ee5ec10d964b2bff5b9b52cf4ec65344f7f1b": {
+			"ID": "nK3mPadCNTRL",
+			"PublicKey": "nodekey:9615ab7460f029236f358a8ae32ee5ec10d964b2bff5b9b52cf4ec65344f7f1b",
+			"HostName": "Xiaomi Pad 6",
+			"DNSName": "xiaomi-pad-6.tailabc12.ts.net.",
+			"OS": "android",
+			"UserID": 935598283501435,
+			"TailscaleIPs": [
+				"100.64.0.12",
+				"fd7a:115c:a1e0::3432:7f1c"
+			],
+			"AllowedIPs": [
+				"100.64.0.12/32",
+				"fd7a:115c:a1e0::3432:7f1c/128"
+			],
+			"Addrs": null,
+			"CurAddr": "",
+			"Relay": "blr",
+			"PeerRelay": "",
+			"RxBytes": 0,
+			"TxBytes": 0,
+			"Created": "2026-09-06T17:22:49.5Z",
+			"LastWrite": "0001-01-01T00:00:00Z",
+			"LastSeen": "2026-09-07T19:25:20.1Z",
+			"LastHandshake": "0001-01-01T00:00:00Z",
+			"Online": true,
+			"ExitNode": false,
+			"ExitNodeOption": false,
+			"Active": false,
+			"TaildropTarget": 0,
+			"NoFileSharingReason": "",
+			"InNetworkMap": true,
+			"InMagicSock": true,
+			"InEngine": false,
+			"KeyExpiry": "2027-03-05T17:22:49Z"
+		}
+	},
+	"User": {
+		"935598283501435": {
+			"ID": 935598283501435,
+			"LoginName": "user@example.com",
+			"DisplayName": "Example User",
+			"ProfilePicURL": ""
+		}
+	},
+	"ClientVersion": null
+}
