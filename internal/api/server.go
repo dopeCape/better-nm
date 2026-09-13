@@ -680,7 +680,18 @@ func (s *Server) eventStream(w http.ResponseWriter, r *http.Request) {
 // --- diag -------------------------------------------------------------------------------------
 
 func (s *Server) diagLAN(w http.ResponseWriter, r *http.Request) {
-	hosts, err := s.d.Diag().LANHosts(r.Context(), r.URL.Query().Get("device"), queryBool(r, "sweep"))
+	device := r.URL.Query().Get("device")
+	if device == "" {
+		// Default to the device carrying the primary connection: "devices on my network".
+		if p := s.d.Snapshot().Status.Primary; p != nil && len(p.Devices) > 0 {
+			device = p.Devices[0]
+		}
+	}
+	if device == "" {
+		writeError(w, core.Errorf(core.KindInvalid, "pass ?device=<name> or connect to a network first", "diag: no device given and nothing is connected"))
+		return
+	}
+	hosts, err := s.d.Diag().LANHosts(r.Context(), device, queryBool(r, "sweep"))
 	if err != nil {
 		writeError(w, err)
 		return
