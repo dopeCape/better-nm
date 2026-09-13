@@ -315,6 +315,34 @@ func TestWifiListAndDetail(t *testing.T) {
 	if p.Autoconnect {
 		t.Error("autoconnect should be off after toggling")
 	}
+
+	// Forget asks first: one tap must not delete the profile
+	r.ui(func() { test.Tap(w.forgetBtn) })
+	r.idle()
+	if _, err := r.c.Profile(context.Background(), fake.OfficeUUID); err != nil {
+		t.Fatalf("a single tap on Forget deleted the profile: %v", err)
+	}
+	r.ui(func() {
+		if w.confirm == nil || r.a.win.Canvas().Overlays().Top() == nil {
+			t.Fatal("Forget should open a confirmation dialog")
+		}
+		w.confirm.Dismiss()
+	})
+	r.idle()
+	if _, err := r.c.Profile(context.Background(), fake.OfficeUUID); err != nil {
+		t.Fatalf("Keep deleted the profile: %v", err)
+	}
+	r.ui(func() {
+		if w.confirm != nil {
+			t.Error("the dialog reference should clear on dismiss")
+		}
+		test.Tap(w.forgetBtn)
+	})
+	r.ui(func() { w.confirm.Confirm() })
+	r.idle()
+	if _, err := r.c.Profile(context.Background(), fake.OfficeUUID); err == nil {
+		t.Error("confirming Forget should delete the profile")
+	}
 }
 
 func TestVPNSwitchConnects(t *testing.T) {
