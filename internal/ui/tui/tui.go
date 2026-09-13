@@ -560,6 +560,7 @@ func (m *Model) statusBar() string {
 	default:
 		right = stBarDim.Render("connecting… ")
 	}
+	left, right = truncate(left, m.width), truncate(right, m.width) // sanitised; names come from outside
 	gap := m.width - lipgloss.Width(left) - lipgloss.Width(right)
 	if gap < 1 {
 		return fit(left, m.width)
@@ -607,12 +608,8 @@ func (m *Model) footer() string {
 	case m.lastEvent != nil:
 		right = stBarDim.Render(clock(m.lastEvent.Time)+" ") + stBar.Render(m.lastEvent.Title+" ")
 	}
+	right = truncate(right, m.width/2) // also sanitises the event title
 	rw := lipgloss.Width(right)
-	maxRight := m.width / 2
-	if rw > maxRight {
-		right = truncate(right, maxRight)
-		rw = lipgloss.Width(right)
-	}
 	leftW := m.width - rw
 	left = fit(truncate(left, leftW), leftW)
 	return stBar.Render(left) + right

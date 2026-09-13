@@ -17,11 +17,13 @@ import (
 const ellipsis = "…"
 
 // truncate cuts s to at most w cells, ending in … when it had to cut. It is
-// ANSI-aware, so styled text may be passed.
+// ANSI-aware, so styled text may be passed. Text from the outside world is
+// sanitised first (see sanitize), so its width is measured as it will show.
 func truncate(s string, w int) string {
 	if w <= 0 {
 		return ""
 	}
+	s = sanitize(s)
 	if lipgloss.Width(s) <= w {
 		return s
 	}
@@ -29,6 +31,61 @@ func truncate(s string, w int) string {
 		return ellipsis
 	}
 	return ansi.Truncate(s, w, ellipsis)
+}
+
+// sanitize drops control characters and every escape sequence except SGR
+// colour codes (ESC [ ... m), so an SSID, hostname or peer name chosen by
+// someone else cannot retitle the window, move the cursor or hide the rest
+// of a row. A dropped ESC leaves what followed it as plain text. Every cell
+// and line passes through truncate/pad/fit, so this is the one choke point.
+func sanitize(s string) string {
+	clean := true
+	for i := 0; i < len(s); i++ {
+		if c := s[i]; (c < 0x20 && c != '\n') || c == 0x7f || c == 0xc2 {
+			clean = false
+			break
+		}
+	}
+	if clean {
+		return s
+	}
+	var b strings.Builder
+	b.Grow(len(s))
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		switch {
+		case c == 0x1b:
+			if end, ok := sgrEnd(s, i); ok {
+				b.WriteString(s[i:end])
+				i = end - 1
+			}
+		case c == '\n':
+			b.WriteByte(c)
+		case c < 0x20 || c == 0x7f:
+		case c == 0xc2 && i+1 < len(s) && s[i+1] >= 0x80 && s[i+1] <= 0x9f:
+			i++ // C1 control, UTF-8 encoded
+		default:
+			b.WriteByte(c)
+		}
+	}
+	return b.String()
+}
+
+// sgrEnd reports whether the ESC at s[i] starts an SGR sequence and where it ends.
+func sgrEnd(s string, i int) (int, bool) {
+	if i+1 >= len(s) || s[i+1] != '[' {
+		return 0, false
+	}
+	for j := i + 2; j < len(s); j++ {
+		switch c := s[j]; {
+		case c >= '0' && c <= '9', c == ';', c == ':':
+		case c == 'm':
+			return j + 1, true
+		default:
+			return 0, false
+		}
+	}
+	return 0, false
 }
 
 // pad right-pads (or truncates) s to exactly w cells.

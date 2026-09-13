@@ -729,6 +729,47 @@ func TestProgramLiveStream(t *testing.T) {
 	tm.WaitFinished(t, teatest.WithFinalTimeout(5*time.Second))
 }
 
+func TestHostileSSIDCannotSteerTheTerminal(t *testing.T) {
+	r := newRig(t)
+	evil := "Evil\x1b]0;pwned\x07\x1b[2J\rNet31m"
+	r.nm.AddAP(fake.WifiDevice, core.WifiNetwork{SSID: evil, Strength: 40, Security: core.SecOpen, Band: "2.4", Channel: 1})
+	h := newHarness(t, r, 100, 30)
+	v := h.view()
+	for _, bad := range []string{"\x1b]", "\x07", "\x1b[2J", "\r", ""} {
+		if strings.Contains(v, bad) {
+			t.Errorf("frame carries %q", bad)
+		}
+	}
+	mustContain(t, v, "Evil", "Net")
+	// every line of the frame is still exactly the terminal width
+	for i, l := range lines(v) {
+		if w := lipgloss.Width(l); w != 100 {
+			t.Errorf("line %d is %d cells wide: %q", i, w, l)
+		}
+	}
+	// the same name in an event title is safe in the footer and the log
+	r.store.AddEvent(context.Background(), core.Event{Time: time.Now(), Type: core.EventConnected, Title: "Connected to " + evil})
+	h.run(h.m.l.eventHistory())
+	h.key("E")
+	v = h.view()
+	if strings.Contains(v, "\x1b]") || strings.Contains(v, "\x07") {
+		t.Errorf("events overlay carries an escape:\n%s", v)
+	}
+	tests := []struct{ in, want string }{
+		{"plain", "plain"},
+		{"\x1b[32m●\x1b[0m ok", "\x1b[32m●\x1b[0m ok"},
+		{"a\x1b]0;t\x07b", "a]0;tb"},
+		{"a\tb\rc", "abc"},
+		{"x31m", "x31m"},
+		{"two\nlines", "two\nlines"},
+	}
+	for _, tt := range tests {
+		if got := sanitize(tt.in); got != tt.want {
+			t.Errorf("sanitize(%q) = %q, want %q", tt.in, got, tt.want)
+		}
+	}
+}
+
 func TestSpeedCancelAlwaysSettles(t *testing.T) {
 	r := newRig(t)
 	r.speed.Delay = 20 * time.Millisecond
