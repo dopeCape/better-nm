@@ -15,8 +15,8 @@
       let
         pkgs = import nixpkgs { inherit system; };
         guiLibs = with pkgs; [
-          libGL libglvnd xorg.libX11 xorg.libXcursor xorg.libXrandr xorg.libXinerama
-          xorg.libXi xorg.libXxf86vm xorg.libXext xorg.libXfixes
+          libGL libglvnd libx11 libxcursor libxrandr libxinerama
+          libxi libxxf86vm libxext libxfixes
           wayland wayland-protocols libxkbcommon
         ];
         bnm = pkgs.buildGoModule {
@@ -54,7 +54,9 @@
           packages = with pkgs; [ go gopls gotools golangci-lint pkg-config goreleaser nfpm
             python3 python3Packages.python-dbusmock python3Packages.dbus-python python3Packages.pygobject3
             dbus networkmanager iperf3 libnotify sqlite gnumake ] ++ guiLibs;
-          shellHook = ''export CGO_CFLAGS="-O2"; echo "bnm dev shell: go $(go version | cut -d' ' -f3)"'';
+          # A version manager (mise, asdf) may export GOROOT for another Go; the
+          # shell's own go must own its GOROOT or `go build` mixes toolchains.
+          shellHook = ''unset GOROOT; export CGO_CFLAGS="-O2"; echo "bnm dev shell: go $(go version | cut -d' ' -f3)"'';
         };
       }) // {
       nixosModules.default = moduleFor { home = false; };
