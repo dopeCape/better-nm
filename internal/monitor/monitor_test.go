@@ -320,9 +320,11 @@ func TestEngineTransitionSurfacesAsEvent(t *testing.T) {
 	if s := m.Status(); s.State != core.BaselineDegraded {
 		t.Errorf("status state = %s, want degraded", s.State)
 	}
+	// The daemon persists what it reads from Events(); storing here as well
+	// used to record every degraded/recovered event twice.
 	stored, err := st.Events(ctx, 0)
-	if err != nil || len(stored) != 1 || stored[0].Type != core.EventDegraded {
-		t.Errorf("stored events = %+v err=%v", stored, err)
+	if err != nil || len(stored) != 0 {
+		t.Errorf("monitor must not persist events itself: %+v err=%v", stored, err)
 	}
 
 	// Recovery: back to 20 ms, expect a recovered event.
