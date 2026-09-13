@@ -684,3 +684,44 @@ func TestProgramLiveStream(t *testing.T) {
 	tm.Send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("q")})
 	tm.WaitFinished(t, teatest.WithFinalTimeout(5*time.Second))
 }
+
+func TestSpeedCancelAlwaysSettles(t *testing.T) {
+	r := newRig(t)
+	r.speed.Delay = 20 * time.Millisecond
+	h := newHarness(t, r, 100, 30)
+	h.key("5")
+	// The done message used to race the cancelled context, so esc left the
+	// tab "running" about half the time; a few rounds make that reproducible.
+	for i := 0; i < 12; i++ {
+		cmd := h.m.speed.start(h.m, true)
+		if cmd == nil || !h.m.speed.running {
+			t.Fatalf("round %d: test did not start", i)
+		}
+		ch := h.m.speed.ch
+		h.key("esc")
+		done := make(chan struct{})
+		go func() {
+			defer close(done)
+			// drain like the program loop: each message re-arms waitSpeed
+			h.feed(waitSpeed(ch)())
+		}()
+		select {
+		case <-done:
+		case <-time.After(5 * time.Second):
+			t.Fatalf("round %d: the speed channel never delivered a done message", i)
+		}
+		if h.m.speed.running || h.m.speed.cancel != nil || h.m.speed.ch != nil {
+			t.Fatalf("round %d: tab still running after esc", i)
+		}
+		if h.m.speed.lastErr != nil {
+			t.Fatalf("round %d: a cancel is not an error: %v", i, h.m.speed.lastErr)
+		}
+	}
+	mustContain(t, h.view(), "speed test cancelled")
+	// and a fresh run still works afterwards
+	r.speed.Delay = 0
+	h.key("q")
+	if h.m.speed.running || h.m.speed.last == nil {
+		t.Fatalf("run after cancel: running=%v last=%v err=%v", h.m.speed.running, h.m.speed.last, h.m.speed.lastErr)
+	}
+}

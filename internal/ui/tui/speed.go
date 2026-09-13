@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -56,18 +57,24 @@ func (t *speedTab) update(m *Model, msg tea.Msg) tea.Cmd {
 		return waitSpeed(t.ch)
 	case speedDoneMsg:
 		t.running = false
-		t.cancel = nil
+		if t.cancel != nil {
+			t.cancel() // release the child context; the test is over either way
+			t.cancel = nil
+		}
 		t.ch = nil
 		if msg.err != nil {
+			if errors.Is(msg.err, context.Canceled) && m.l.ctx.Err() == nil {
+				// the user pressed esc: not a failure
+				m.setFlash("speed test cancelled", false)
+				return m.flashTimer()
+			}
 			t.lastErr = msg.err
 			m.setFlash("speed test: "+errText(msg.err), true)
 			return m.flashTimer()
 		}
 		r := msg.result
 		t.last = &r
-		for _, p := range speedPhases {
-			t.pct[p] = 100
-		}
+		t.apply(core.SpeedProgress{Phase: "done"})
 		return m.l.speedHistory()
 	case tea.KeyMsg:
 		switch msg.String() {
@@ -121,7 +128,8 @@ func (t *speedTab) start(m *Model, quick bool) tea.Cmd {
 	t.rate = map[string]float64{}
 	ch := make(chan tea.Msg, 256)
 	t.ch = ch
-	ctx, cancel := context.WithCancel(m.l.ctx)
+	parent := m.l.ctx
+	ctx, cancel := context.WithCancel(parent)
 	t.cancel = cancel
 	c := m.l.c
 	go func() {
@@ -132,9 +140,12 @@ func (t *speedTab) start(m *Model, quick bool) tea.Cmd {
 			default: // never block the stream reader; a dropped tick is redrawn by the next
 			}
 		})
+		// The done message must always land, or the tab stays "running"
+		// after esc: only give up when the whole program is going away
+		// (the Cmd chain that drains ch has stopped by then).
 		select {
 		case ch <- speedDoneMsg{res, err}:
-		case <-ctx.Done():
+		case <-parent.Done():
 		}
 	}()
 	return tea.Batch(m.spin.Tick, waitSpeed(ch))
