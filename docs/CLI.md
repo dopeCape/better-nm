@@ -90,7 +90,7 @@ verdict with the current round-trip per anchor, and the daemon build, uptime and
 | Command | What it does |
 |---|---|
 | `list [--rescan] [--device D]` | SSIDs in range sorted active first, then by signal: marker, SSID, `▂▄▆█` bars and %, band/channel, security (`open`, `OWE`, `WEP`, `WPA2`, `WPA3`, `802.1X`), `connected`/`saved`. `--rescan` requests a scan and waits (up to 6 s) for the results. |
-| `connect <ssid> [--password P \| --ask] [--hidden] [--device D]` | Joins the network; NM creates the profile when there is none. A secured, unknown network prompts for the password on a terminal (`--ask` forces the prompt; it never echoes); without a terminal it is an error with the hint to pass `--password` or `--ask`. |
+| `connect <ssid> [--password P \| --ask] [--hidden] [--device D]` | Joins the network; NM creates the profile when there is none. A secured, unknown network prompts for the password on a terminal (`--ask` forces the prompt; it never echoes); without a terminal it is an error with the hint to pass `--password` or `--ask`. An SSID that is not in range (after one rescan) and has no saved profile is refused unless `--hidden` is given, because NM would otherwise create and keep a profile for it. |
 | `disconnect [--device D]` | Brings the Wi-Fi device down. |
 | `forget <ssid\|uuid>` | Deletes the saved Wi-Fi profile. |
 | `on` / `off` | Toggles the Wi-Fi radio. |

@@ -269,6 +269,23 @@ func TestWifiConnect(t *testing.T) {
 	}
 	r.nm.Fail("ConnectWifi", nil)
 
+	// An SSID that is not in range (after one rescan) is refused before NM
+	// is asked, since NM would treat it as hidden and keep the profile it
+	// creates for it; --hidden says that is intended.
+	r.nm.Fail("ConnectWifi", errors.New("nm must not be asked to connect to an unseen network"))
+	res = r.run("wifi", "connect", "Ghost")
+	if res.code != ExitError {
+		t.Errorf("unseen ssid: exit %d", res.code)
+	}
+	wants(t, res.err, `error: "Ghost" is not in range`, "hint: check `bnm wifi list`, or pass --hidden")
+	if res.out != "" {
+		t.Errorf("stdout should be empty: %q", res.out)
+	}
+	r.nm.Fail("ConnectWifi", nil)
+	res = r.run("wifi", "connect", "Ghost", "--hidden", "--password", "secret12")
+	if res.code != 0 {
+		t.Errorf("--hidden should reach NM: exit %d %s", res.code, res.err)
+	}
 	// Quiet and JSON action output.
 	res = r.ok("wifi", "connect", fake.CafeSSID, "-q")
 	if res.out != "" {
