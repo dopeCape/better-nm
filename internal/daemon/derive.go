@@ -126,9 +126,11 @@ func (d *deriver) apply(v view, now time.Time) []core.Event {
 			out = append(out, connectedEvent(cur, key, now))
 		}
 	case d.primary != nil && cur == nil:
+		// The connectivity state is kept until the disconnect is confirmed
+		// (flush) or a different network connects: a roam must leave an
+		// outstanding no-internet in place so the later "full" says restored.
 		d.pendingDisc = &pendingDisconnect{key: d.primaryKey, name: d.primaryName, uuid: d.primary.ProfileUUID, at: now}
 		d.setPrimary(nil, "")
-		d.resetConnectivity()
 	case d.primary != nil && cur != nil && cur.ProfileUUID != d.primary.ProfileUUID:
 		d.pendingDisc = nil
 		d.setPrimary(cur, key)
@@ -186,6 +188,7 @@ func (d *deriver) flush(now time.Time) []core.Event {
 	if pd := d.pendingDisc; pd != nil && !now.Before(pd.at.Add(d.debounce)) {
 		d.pendingDisc = nil
 		d.monitorKey, d.monitorGateway = "", ""
+		d.resetConnectivity()
 		out = append(out, disconnectedEvent(pd, now))
 	}
 	if pn := d.pendingNoInternet; pn != nil && d.primary != nil && !now.Before(pn.since.Add(d.grace)) {

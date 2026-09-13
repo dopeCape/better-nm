@@ -133,6 +133,43 @@ func TestDeriveRoamWithinDebounceIsSilent(t *testing.T) {
 	}
 }
 
+// A roam is "nothing happened": an outstanding no-internet must survive it so
+// the later full connectivity says internet-restored (and a still-bad link
+// does not repeat no-internet).
+func TestDeriveRoamKeepsNoInternetState(t *testing.T) {
+	d := newDeriver(5*time.Second, 10*time.Second)
+	roamed := *homeUp
+	roamed.Path = "/ac/u-home-2"
+	runSteps(t, d, []step{
+		{at: 0, view: ptr(vw(homeUp, core.ConnFull)), want: ""},
+		{at: time.Second, view: ptr(vw(homeUp, core.ConnLimited)), want: ""},
+		{at: 12 * time.Second, want: "no-internet"},
+		{at: 13 * time.Second, view: ptr(vw(nil, core.ConnNone)), want: ""},
+		{at: 15 * time.Second, view: ptr(vw(&roamed, core.ConnLimited)), want: ""}, // roam: silent
+		{at: 30 * time.Second, want: ""},                                           // no second no-internet
+		{at: 31 * time.Second, view: ptr(vw(&roamed, core.ConnFull)), want: "internet-restored"},
+	})
+	// A pending (not yet fired) no-internet also survives a roam and keeps its clock.
+	d = newDeriver(5*time.Second, 10*time.Second)
+	runSteps(t, d, []step{
+		{at: 0, view: ptr(vw(homeUp, core.ConnFull)), want: ""},
+		{at: time.Second, view: ptr(vw(homeUp, core.ConnPortal)), want: ""},
+		{at: 2 * time.Second, view: ptr(vw(nil, core.ConnNone)), want: ""},
+		{at: 4 * time.Second, view: ptr(vw(&roamed, core.ConnPortal)), want: ""},
+		{at: 12 * time.Second, want: "no-internet"},
+	})
+	// A real disconnect still clears it: reconnecting elsewhere never says restored.
+	d = newDeriver(5*time.Second, 10*time.Second)
+	runSteps(t, d, []step{
+		{at: 0, view: ptr(vw(homeUp, core.ConnFull)), want: ""},
+		{at: time.Second, view: ptr(vw(homeUp, core.ConnNone)), want: ""},
+		{at: 12 * time.Second, want: "no-internet"},
+		{at: 13 * time.Second, view: ptr(vw(nil, core.ConnNone)), want: ""},
+		{at: 19 * time.Second, want: "disconnected"},
+		{at: 20 * time.Second, view: ptr(vw(cafeUp, core.ConnFull)), want: "connected"},
+	})
+}
+
 func TestDeriveSwitchNetworkWithinDebounce(t *testing.T) {
 	d := newDeriver(5*time.Second, 10*time.Second)
 	runSteps(t, d, []step{
