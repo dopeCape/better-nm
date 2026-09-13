@@ -3,6 +3,7 @@ package desktop
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync/atomic"
 
 	"fyne.io/fyne/v2"
@@ -49,7 +50,7 @@ func (v *overviewView) build() fyne.CanvasObject {
 	v.conn = newKV("Name", "IP", "Gateway", "DNS", "Signal")
 	v.vpnRows = container.NewVBox()
 	v.vpnEmpty = caption("No VPNs configured")
-	v.verdict = bold("Quality: unknown")
+	v.verdict = bold("Unknown")
 	v.rtt = mono("")
 	v.spark = newSparkline(56)
 	v.events = container.NewVBox(caption("No events yet"))
@@ -136,7 +137,7 @@ func (v *overviewView) render(d overviewData) {
 	v.vpnRows.Refresh()
 	// quality
 	hs := headerState{monitor: &d.monitor}
-	v.verdict.SetText("Quality: " + hs.verdict())
+	v.verdict.SetText(verdictLabel(hs.verdict())) // the section is already titled Quality
 	var gw *core.Baseline
 	for i := range d.monitor.Anchors {
 		if d.monitor.Anchors[i].Anchor == "gateway" {
@@ -196,7 +197,7 @@ func (v *overviewView) vpnRow(vpn core.VPN) fyne.CanvasObject {
 		})
 	}
 	state := caption(vpnStateText(vpn))
-	return container.NewHBox(check, bold(vpn.Name), newBadge(vpn.Kind), spacer(), state)
+	return container.NewHBox(check, bold(vpn.Name), kindBadge(vpn), spacer(), state)
 }
 
 // vpnStateText is the short state line shown next to a VPN.
@@ -233,4 +234,16 @@ func (v *overviewView) setEvents(events []core.Event) {
 		v.events.Add(container.NewBorder(nil, nil, nil, when, title))
 	}
 	v.events.Refresh()
+}
+
+// verdictLabel renders a monitor verdict as a standalone word: "ok" reads as "OK",
+// the rest are capitalised.
+func verdictLabel(v string) string {
+	if v == "ok" {
+		return "OK"
+	}
+	if v == "" {
+		return "Unknown"
+	}
+	return strings.ToUpper(v[:1]) + v[1:]
 }

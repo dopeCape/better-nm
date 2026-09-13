@@ -180,7 +180,7 @@ func (v *vpnView) row(vpn core.VPN) fyne.CanvasObject {
 		detail = vpn.Tailscale.Tailnet
 	}
 	name := bold(vpn.Name)
-	left := container.NewHBox(check, inset(st, 0, 6, 0, 0), name, inset(newBadge(vpn.Kind), 0, 0, 0, 8))
+	left := container.NewHBox(check, inset(st, 0, 6, 0, 0), name, inset(kindBadge(vpn), 0, 0, 0, 8))
 	if detail != "" {
 		left.Add(inset(mono(detail), 0, 0, 0, 8))
 	}
@@ -334,4 +334,13 @@ func (v *vpnView) importContent(filename, content string) {
 			v.a.onUI(func() { v.actErr.set(err) })
 		}
 	})
+}
+
+// kindBadge labels the backend kind, except when the kind is the name itself
+// ("Tailscale Tailscale" says nothing twice); then it is an empty spacer.
+func kindBadge(v core.VPN) fyne.CanvasObject {
+	if strings.EqualFold(v.Kind, v.Name) {
+		return container.NewWithoutLayout()
+	}
+	return newBadge(v.Kind)
 }

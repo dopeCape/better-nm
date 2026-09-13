@@ -87,7 +87,32 @@ func (a *VPNAdapter) List(ctx context.Context) ([]core.VPN, error) {
 	if err := a.fail["List"]; err != nil {
 		return nil, err
 	}
-	return append([]core.VPN(nil), a.vpns...), nil
+	out := make([]core.VPN, len(a.vpns))
+	for i, v := range a.vpns {
+		out[i] = cloneVPN(v)
+	}
+	return out, nil
+}
+
+// cloneVPN deep-copies the per-backend info so a caller's snapshot never
+// aliases state the fake mutates later (the race detector catches this otherwise).
+func cloneVPN(v core.VPN) core.VPN {
+	if v.Tailscale != nil {
+		ts := *v.Tailscale
+		ts.Peers = append([]core.TailscalePeer(nil), v.Tailscale.Peers...)
+		ts.Health = append([]string(nil), v.Tailscale.Health...)
+		v.Tailscale = &ts
+	}
+	if v.WireGuard != nil {
+		wg := *v.WireGuard
+		wg.Peers = append([]core.WireGuardPeer(nil), v.WireGuard.Peers...)
+		v.WireGuard = &wg
+	}
+	if v.NMVPN != nil {
+		n := *v.NMVPN
+		v.NMVPN = &n
+	}
+	return v
 }
 
 func (a *VPNAdapter) Connect(ctx context.Context, id string) error {
