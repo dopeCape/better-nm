@@ -45,7 +45,7 @@ jobs:
           go-version-file: go.mod
           cache: true
       - name: Fyne build deps
-        run: sudo apt-get update -q && sudo apt-get install -y -q gcc libgl1-mesa-dev xorg-dev libxkbcommon-dev libwayland-dev libfuse2
+        run: sudo apt-get update -q && sudo apt-get install -y -q gcc libgl1-mesa-dev xorg-dev libxkbcommon-dev libwayland-dev libfuse2 file desktop-file-utils
       - name: Build desktop app
         run: make desktop VERSION=${GITHUB_REF_NAME}
       - name: Build AppImage
