@@ -1,37 +1,50 @@
 package nm
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strings"
 
+	"github.com/dopeCape/better-nm/internal/core"
 	"github.com/godbus/dbus/v5"
 )
 
 // Sentinel errors. Every error the client returns wraps at most one of these;
-// test with errors.Is. The NM message is always preserved in the chain.
+// test with errors.Is. The NM message is always preserved in the chain. Each
+// sentinel also carries the matching core.ErrorKind, so core.KindOf (and with
+// it the API status code and the CLI exit code) sees "permission", "not-found"
+// and so on rather than "internal".
 var (
 	// ErrPermissionDenied: polkit (or a profile ACL) refused. Err.Hint says what
 	// one-time step fixes it.
-	ErrPermissionDenied = errors.New("permission denied")
+	ErrPermissionDenied = core.Errorf(core.KindPermission, "", "permission denied")
 	// ErrNotFound: no such profile / device / active connection / object.
-	ErrNotFound = errors.New("not found")
+	ErrNotFound = core.Errorf(core.KindNotFound, "", "not found")
 	// ErrAuthFailed: the network rejected our credentials (wrong Wi-Fi password,
 	// VPN login refused).
-	ErrAuthFailed = errors.New("authentication failed")
+	ErrAuthFailed = core.Errorf(core.KindInvalid, "", "authentication failed")
 	// ErrNoSecrets: NM needed a secret nobody could supply (no secret agent
 	// registered; the profile marks the secret agent-owned or not-saved).
-	ErrNoSecrets = errors.New("no secrets available")
+	ErrNoSecrets = core.Errorf(core.KindInvalid, "", "no secrets available")
 	// ErrUnsupported: the operation or profile kind is not supported (by this NM,
 	// by bnm v1, or by the mock in tests).
-	ErrUnsupported = errors.New("unsupported")
+	ErrUnsupported = core.Errorf(core.KindUnsupported, "", "unsupported")
 	// ErrUnavailable: NetworkManager is not running / not on the bus.
-	ErrUnavailable = errors.New("NetworkManager unavailable")
+	ErrUnavailable = core.Errorf(core.KindUnavailable, "", "NetworkManager unavailable")
 	// ErrConflict: the profile changed under us (Update2 version-id mismatch).
-	ErrConflict = errors.New("profile changed concurrently")
-	// ErrTimeout: an activation did not settle in time.
-	ErrTimeout = errors.New("timed out")
+	ErrConflict = core.Errorf(core.KindConflict, "", "profile changed concurrently")
+	// ErrTimeout: an activation did not settle in time. It matches
+	// context.DeadlineExceeded so the API answers 504.
+	ErrTimeout error = timeoutError{}
 )
+
+// timeoutError is ErrTimeout's type: comparable (errors.Is by value) and a
+// context.DeadlineExceeded for callers that classify timeouts that way.
+type timeoutError struct{}
+
+func (timeoutError) Error() string        { return "timed out" }
+func (timeoutError) Is(target error) bool { return target == context.DeadlineExceeded }
 
 // polkitHint is appended to permission errors. NM makes polkit checks with
 // allow_interaction=TRUE, so with a session polkit agent the user gets a
@@ -46,10 +59,13 @@ type Error struct {
 	Op   string // what bnm was doing, e.g. "activate 8694ab34-..."
 	Name string // D-Bus error name, e.g. org.freedesktop.NetworkManager.PermissionDenied
 	Msg  string // NM's own message, verbatim
-	Hint string // human hint (what one-time step fixes it), may be empty
+	hint string // human hint (what one-time step fixes it), may be empty
 	kind error  // one of the sentinels or nil
 }
 
+// Error renders op, sentinel, NM's message and the D-Bus error name. The hint
+// is not part of it: core.HintOf(err) returns it and the API and surfaces show
+// it on its own line, so it is never printed twice.
 func (e *Error) Error() string {
 	var b strings.Builder
 	b.WriteString("nm: ")
@@ -66,14 +82,13 @@ func (e *Error) Error() string {
 	if e.Name != "" {
 		fmt.Fprintf(&b, " (%s)", e.Name)
 	}
-	if e.Hint != "" {
-		b.WriteString(". ")
-		b.WriteString(e.Hint)
-	}
 	return b.String()
 }
 
-// Unwrap exposes the sentinel for errors.Is.
+// Hint is the one-time fix for this error when bnm knows one (core.HintOf).
+func (e *Error) Hint() string { return e.hint }
+
+// Unwrap exposes the sentinel for errors.Is and core.KindOf.
 func (e *Error) Unwrap() error { return e.kind }
 
 // wrapDBus turns a godbus error into an *Error with the right sentinel. Non-D-Bus
@@ -95,7 +110,7 @@ func wrapDBus(op string, err error) error {
 		}
 	}
 	e := &Error{Op: op, Name: de.Name, Msg: dbusMessage(de)}
-	e.kind, e.Hint = classify(de.Name, e.Msg)
+	e.kind, e.hint = classify(de.Name, e.Msg)
 	return e
 }
 
@@ -155,7 +170,7 @@ func classify(name, msg string) (error, string) {
 func newErr(op string, kind error, msg string) error {
 	e := &Error{Op: op, Msg: msg, kind: kind}
 	if errors.Is(kind, ErrPermissionDenied) {
-		e.Hint = polkitHint
+		e.hint = polkitHint
 	}
 	return e
 }

@@ -217,8 +217,8 @@ func TestLANHostsSweepRefused(t *testing.T) {
 	if got == nil || got.IP.String() != "192.168.1.73" {
 		t.Errorf("sweep self = %v", got)
 	}
-	if !strings.Contains(err.Error(), "ping_group_range") {
-		t.Errorf("error lacks the hint: %v", err)
+	if !strings.Contains(core.HintOf(err), "ping_group_range") {
+		t.Errorf("error lacks the hint: %v (hint %q)", err, core.HintOf(err))
 	}
 }
 

@@ -149,7 +149,7 @@ func (r *Registry) route(ctx context.Context, id string) (core.VPNAdapter, error
 			return a, nil
 		}
 	}
-	return nil, fmt.Errorf("vpn: no VPN with id %q", id)
+	return nil, core.Errorf(core.KindNotFound, "run `bnm vpn` to list them", "vpn: no VPN with id %q", id)
 }
 
 // Connect routes to the adapter owning id.

@@ -184,7 +184,7 @@ func (a *Adapter) check(ctx context.Context, id string) error {
 		return fmt.Errorf("nmvpn: profile %s: %w", id, err)
 	}
 	if p.Type != core.ProfileVPN {
-		return fmt.Errorf("nmvpn: profile %s is %s, not a plugin VPN", id, p.Type)
+		return core.Errorf(core.KindInvalid, "", "nmvpn: profile %s is %s, not a plugin VPN", id, p.Type)
 	}
 	return nil
 }

@@ -114,7 +114,7 @@ func TestAdapterListReadOnly(t *testing.T) {
 	}
 	// Writes fail with the hint and ErrAccessDenied.
 	err = a.Connect(ctx, VPNID)
-	if !errors.Is(err, ErrAccessDenied) || !strings.Contains(err.Error(), "--operator=alice") {
+	if !errors.Is(err, ErrAccessDenied) || !strings.Contains(core.HintOf(err), "--operator=alice") || core.KindOf(err) != core.KindPermission {
 		t.Errorf("Connect read-only: %v", err)
 	}
 	// The 403 is cached: the second List does not probe again.
@@ -316,7 +316,7 @@ func TestAdapterTailscaleControl(t *testing.T) {
 		"Logout":       func() error { return ctl.Logout(ctx) },
 	} {
 		err := fn()
-		if !errors.Is(err, ErrAccessDenied) || !strings.Contains(err.Error(), "--operator=alice") {
+		if !errors.Is(err, ErrAccessDenied) || !strings.Contains(core.HintOf(err), "--operator=alice") || core.KindOf(err) != core.KindPermission {
 			t.Errorf("%s read-only: %v", name, err)
 		}
 	}

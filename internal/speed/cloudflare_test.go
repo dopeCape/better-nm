@@ -319,6 +319,9 @@ func TestRateLimitIsSoftError(t *testing.T) {
 	if !errors.As(err, &rl) || rl.RetryAfter != 30*time.Second || rl.Phase != "latency" {
 		t.Errorf("RateLimitedError = %+v", rl)
 	}
+	if core.KindOf(err) != core.KindUnavailable || !strings.Contains(core.HintOf(err), "30s") {
+		t.Errorf("kind = %s hint = %q, want unavailable with the retry-after", core.KindOf(err), core.HintOf(err))
+	}
 	if res.Provider != ProviderCloudflare || res.Duration <= 0 {
 		t.Errorf("partial result = %+v", res)
 	}

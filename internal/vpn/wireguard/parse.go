@@ -11,7 +11,6 @@ package wireguard
 import (
 	"bufio"
 	"encoding/base64"
-	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -24,7 +23,7 @@ import (
 
 // ErrInvalidConf wraps every parse failure so callers can distinguish a bad
 // file from an NM failure.
-var ErrInvalidConf = errors.New("wireguard: invalid wg-quick config")
+var ErrInvalidConf = core.Errorf(core.KindInvalid, "", "wireguard: invalid wg-quick config")
 
 // maxIfaceName is the kernel's IFNAMSIZ-1.
 const maxIfaceName = 15

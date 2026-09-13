@@ -2,7 +2,6 @@ package speed
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net/http"
 
@@ -10,7 +9,7 @@ import (
 )
 
 // ErrUnknownProvider is returned by a tester built for a provider bnm does not know.
-var ErrUnknownProvider = errors.New("speed: unknown provider (use cloudflare or iperf3)")
+var ErrUnknownProvider = core.Errorf(core.KindInvalid, "use cloudflare or iperf3", "speed: unknown provider")
 
 // Option configures New.
 type Option func(*options)
