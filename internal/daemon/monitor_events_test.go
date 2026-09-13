@@ -110,6 +110,28 @@ func TestMonitorEventStoredOnce(t *testing.T) {
 	}
 }
 
+// An event derived while serving an API mutation must reach history even if
+// that request's context is already cancelled (the client hung up).
+func TestEmitEventsSurvivesCancelledRequest(t *testing.T) {
+	st, err := store.Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	d, err := New(Options{NM: fake.NewNM(), Store: st, Config: config.Default(),
+		ConfigPath: filepath.Join(t.TempDir(), "config.toml"), Logger: slog.New(slog.DiscardHandler)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	cctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	d.emitEvents(cctx, []core.Event{{Type: core.EventVPNUp, Title: "x"}})
+	evs, err := st.Events(context.Background(), 0)
+	if err != nil || len(evs) != 1 || evs[0].Type != core.EventVPNUp {
+		t.Fatalf("stored = %+v err=%v, want the vpn-up event", evs, err)
+	}
+}
+
 // monitorRunner adapts monitor.Monitor.Run to the daemon's Monitor port, as cmd/bnmd does.
 type monitorRunner struct{ *monitor.Monitor }
 
