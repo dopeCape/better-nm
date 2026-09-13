@@ -146,6 +146,21 @@ type Profile struct {
 	VersionID      uint64       `json:"version_id"`
 	Active         bool         `json:"active"`
 	NMPath         string       `json:"nm_path,omitempty"`
+	// WireGuard is the wireguard setting of a ProfileWireGuard profile when the
+	// backend exposes it; nil otherwise. Never carries the private key.
+	WireGuard *WireGuardSetting `json:"wireguard,omitempty"`
+	// VPNData is NM's vpn.data map (remote, gateway, username, ...) for a
+	// ProfileVPN profile when the backend exposes it; nil otherwise. Never secrets.
+	VPNData map[string]string `json:"vpn_data,omitempty"`
+}
+
+// WireGuardSetting is the non-secret part of an NM wireguard setting.
+type WireGuardSetting struct {
+	PublicKey  string          `json:"public_key,omitempty"`
+	ListenPort int             `json:"listen_port,omitempty"`
+	FwMark     int             `json:"fwmark,omitempty"`
+	MTU        int             `json:"mtu,omitempty"`
+	Peers      []WireGuardPeer `json:"peers,omitempty"`
 }
 
 // ActiveState is NM's ActiveConnection state, normalised.
