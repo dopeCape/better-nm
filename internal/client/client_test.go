@@ -105,6 +105,9 @@ func main() {
 		os.Exit(1)
 	}
 	fmt.Println("stub bnmd listening on", *socket)
+	if wd, err := os.Getwd(); err == nil {
+		fmt.Println("stub bnmd cwd", wd)
+	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/v1/status", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -178,6 +181,10 @@ func TestAutoStartSpawnsDaemon(t *testing.T) {
 	logData, err := os.ReadFile(filepath.Join(dir, "bnm", "bnmd.log"))
 	if err != nil || !strings.Contains(string(logData), "stub bnmd listening") {
 		t.Errorf("log = %q %v", logData, err)
+	}
+	// the daemon does not pin the directory bnm was run from
+	if !strings.Contains(string(logData), "stub bnmd cwd /\n") {
+		t.Errorf("spawned daemon must run from /, log = %q", logData)
 	}
 	// a second client finds it running and does not spawn again
 	c2, err := New(WithSocket(socket), WithDaemonPath(filepath.Join(dir, "does-not-exist")))

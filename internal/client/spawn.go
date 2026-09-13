@@ -58,6 +58,9 @@ func (c *Client) spawn() error {
 	cmd.Stdin = nil
 	cmd.Stdout = logf
 	cmd.Stderr = logf
+	// A long-lived daemon must not pin the directory bnm happened to be run
+	// from (a removable drive or a temp dir could never be unmounted/removed).
+	cmd.Dir = "/"
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
 	cmd.Env = os.Environ()
 	if err := cmd.Start(); err != nil {
