@@ -65,7 +65,7 @@ type Link struct {
 	Up        bool     `json:"up"`
 	HwAddr    string   `json:"hwaddr,omitempty"`
 	Addresses []string `json:"addresses,omitempty"`
-	PeerNetNS int      `json:"peer_netns,omitempty"` // veth link-netnsid, -1 unknown
+	PeerNetNS int      `json:"peer_netns"` // veth link-netnsid, -1 unknown
 	MTU       int      `json:"mtu,omitempty"`
 }
 
