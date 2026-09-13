@@ -178,11 +178,14 @@ func realOptions(ctx context.Context, cfg config.Config, logger *slog.Logger) (d
 	nt := &policyNotifier{Notifier: notify.New(policyFromConfig(cfg.Notify), logger)}
 
 	return daemon.Options{
-		NM:        nmClient,
-		Store:     st,
-		VPN:       reg,
-		Monitor:   monitorRunner{mon},
-		Speed:     speed.New(cfg.Speed.Provider),
+		NM:      nmClient,
+		Store:   st,
+		VPN:     reg,
+		Monitor: monitorRunner{mon},
+		// The daemon fills SpeedOptions.Provider from the config when a request
+		// leaves it empty, and a request may name another provider; the
+		// dispatcher picks the tester per call.
+		Speed:     speed.NewDispatcher(),
 		Notifier:  nt,
 		WireGuard: wgImporter{wg},
 		Diag: daemon.DiagFuncs{

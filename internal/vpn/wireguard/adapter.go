@@ -133,7 +133,7 @@ func (a *Adapter) check(ctx context.Context, id string) error {
 		return fmt.Errorf("wireguard: profile %s: %w", id, err)
 	}
 	if p.Type != core.ProfileWireGuard {
-		return fmt.Errorf("wireguard: profile %s is %s, not wireguard", id, p.Type)
+		return core.Errorf(core.KindInvalid, "", "wireguard: profile %s is %s, not wireguard", id, p.Type)
 	}
 	return nil
 }

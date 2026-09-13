@@ -19,6 +19,7 @@ import (
 	"github.com/dopeCape/better-nm/internal/config"
 	"github.com/dopeCape/better-nm/internal/core"
 	"github.com/dopeCape/better-nm/internal/daemon"
+	"github.com/dopeCape/better-nm/internal/diag"
 	"github.com/dopeCape/better-nm/internal/fake"
 	"github.com/dopeCape/better-nm/internal/version"
 )
@@ -49,7 +50,10 @@ func shortTempDir(t *testing.T) string {
 	return dir
 }
 
-func newRig(t *testing.T) *rig {
+func newRig(t *testing.T) *rig { return newRigWith(t, nil) }
+
+// newRigWith lets a test adjust the daemon's options before it starts.
+func newRigWith(t *testing.T, tweak func(*daemon.Options)) *rig {
 	t.Helper()
 	r := &rig{
 		t:        t,
@@ -65,7 +69,7 @@ func newRig(t *testing.T) *rig {
 	r.socket = filepath.Join(dir, "bnmd.sock")
 	r.cfgPath = filepath.Join(dir, "config.toml")
 	t.Setenv("XDG_STATE_HOME", dir)
-	d, err := daemon.New(daemon.Options{
+	opts := daemon.Options{
 		NM:                r.nm,
 		VPN:               fake.NewVPNRegistry(r.ts, fake.NewWireGuard(), fake.NewNMVPN()),
 		Monitor:           r.mon,
@@ -80,7 +84,11 @@ func newRig(t *testing.T) *rig {
 		Version:           "test-1",
 		Debounce:          30 * time.Millisecond,
 		ConnectivityGrace: 30 * time.Millisecond,
-	})
+	}
+	if tweak != nil {
+		tweak(&opts)
+	}
+	d, err := daemon.New(opts)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -487,6 +495,34 @@ func TestEventStreamRawHeartbeat(t *testing.T) {
 	}
 	if !strings.Contains(got, "Content-Type: text/event-stream") || !strings.Contains(got, ": connected") {
 		t.Errorf("headers/prelude missing:\n%s", got)
+	}
+}
+
+// A refused ping socket (Debian/Ubuntu without ping_group_range) skips the
+// sweep but the neighbour table is still valid: the route must answer 200
+// with the hosts rather than fail the whole call.
+func TestDiagLANSweepSkippedStillReturnsHosts(t *testing.T) {
+	fakeDiag := fake.NewDiag()
+	r := newRigWith(t, func(o *daemon.Options) {
+		o.Diag = daemon.DiagFuncs{
+			LANHostsFn: func(ctx context.Context, device string, sweep bool) ([]core.LANHost, error) {
+				hosts, _ := fakeDiag.LANHosts(ctx, device, false)
+				return hosts, &diag.SweepError{Err: diag.ErrNeedsPingGroup}
+			},
+		}
+	})
+	hosts, err := r.c.LANHosts(ctxT(t), "", true)
+	if err != nil {
+		t.Fatalf("lan with a skipped sweep: %v", err)
+	}
+	if len(hosts) != 3 {
+		t.Errorf("hosts = %+v, want the 3 table entries", hosts)
+	}
+	// Any other error still fails the call with its kind.
+	fakeDiag.Err = core.Errorf(core.KindNotFound, "", "no such device")
+	r2 := newRigWith(t, func(o *daemon.Options) { o.Diag = fakeDiag })
+	if _, err := r2.c.LANHosts(ctxT(t), "", true); !errors.Is(err, core.ErrNotFound) {
+		t.Errorf("err = %v, want not-found", err)
 	}
 }
 

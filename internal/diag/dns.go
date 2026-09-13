@@ -23,7 +23,7 @@ func DNSLookup(ctx context.Context, name, server, qtype string) (core.DNSAnswer,
 	}
 	ans := core.DNSAnswer{Name: name, Server: server, Type: qtype, Answers: []string{}}
 	if name == "" {
-		return ans, fmt.Errorf("diag: dns: empty name")
+		return ans, core.Errorf(core.KindInvalid, "", "diag: dns: empty name")
 	}
 	r := &net.Resolver{PreferGo: true}
 	if server != "" {
@@ -73,7 +73,7 @@ func DNSLookup(ctx context.Context, name, server, qtype string) (core.DNSAnswer,
 			answers = append(answers, strings.TrimSuffix(n.Host, "."))
 		}
 	default:
-		return ans, fmt.Errorf("diag: dns: unsupported type %q (A, AAAA, MX, TXT, CNAME, NS)", qtype)
+		return ans, core.Errorf(core.KindInvalid, "use A, AAAA, MX, TXT, CNAME or NS", "diag: dns: unsupported type %q", qtype)
 	}
 	ans.Duration = time.Since(start)
 	if err != nil {

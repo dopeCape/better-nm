@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/dopeCape/better-nm/internal/core"
 	"github.com/godbus/dbus/v5"
 )
 
@@ -61,8 +62,8 @@ func TestWrapDBus(t *testing.T) {
 			if !strings.Contains(err.Error(), tt.msg) || !strings.Contains(err.Error(), "test op") {
 				t.Fatalf("message must carry op and NM text: %v", err)
 			}
-			if (e.Hint != "") != tt.hint {
-				t.Fatalf("hint=%q want present=%v", e.Hint, tt.hint)
+			if (e.Hint() != "") != tt.hint {
+				t.Fatalf("hint=%q want present=%v", e.Hint(), tt.hint)
 			}
 		})
 	}
@@ -73,8 +74,11 @@ func TestWrapDBusPolkitHint(t *testing.T) {
 	if !errors.Is(err, ErrPermissionDenied) {
 		t.Fatal(err)
 	}
-	if !strings.Contains(err.Error(), "polkit") || !strings.Contains(err.Error(), "agent") {
-		t.Fatalf("permission errors must hint at a session polkit agent: %v", err)
+	if h := core.HintOf(err); !strings.Contains(h, "polkit") || !strings.Contains(h, "agent") {
+		t.Fatalf("permission errors must hint at a session polkit agent: %q", h)
+	}
+	if strings.Contains(err.Error(), "polkit") {
+		t.Fatalf("the hint must not be repeated inside Error(): %v", err)
 	}
 	// Pointer form and non-D-Bus errors.
 	if err := wrapDBus("op", context.Canceled); !errors.Is(err, context.Canceled) || strings.HasPrefix(err.Error(), "nm: op: context canceled") == false {
@@ -93,8 +97,8 @@ func TestWrapDBusPolkitHint(t *testing.T) {
 
 func TestNewErrAndPolkitAuthActions(t *testing.T) {
 	err := newErr("scan wlan0", ErrPermissionDenied, "denied")
-	if !errors.Is(err, ErrPermissionDenied) || !strings.Contains(err.Error(), "polkit") {
-		t.Fatalf("newErr permission: %v", err)
+	if !errors.Is(err, ErrPermissionDenied) || !strings.Contains(core.HintOf(err), "polkit") {
+		t.Fatalf("newErr permission: %v (hint %q)", err, core.HintOf(err))
 	}
 	err = newErr("x", nil, "plain")
 	if err.Error() != "nm: x: plain" {
@@ -108,6 +112,44 @@ func TestNewErrAndPolkitAuthActions(t *testing.T) {
 	}
 	if PolkitAuthActions(nil) != nil {
 		t.Fatal("nil in, nil out")
+	}
+}
+
+// Every sentinel must surface as its core.ErrorKind: the API derives the HTTP
+// status from core.KindOf and the CLI its exit code, so an "internal" here
+// turns a polkit denial into a 500.
+func TestSentinelsCarryCoreKinds(t *testing.T) {
+	tests := []struct {
+		err  error
+		kind core.ErrorKind
+		is   error
+	}{
+		{wrapDBus("op", dbus.Error{Name: "org.freedesktop.NetworkManager.PermissionDenied", Body: []any{"no"}}), core.KindPermission, core.ErrPermission},
+		{wrapDBus("op", dbus.Error{Name: "org.freedesktop.NetworkManager.UnknownConnection", Body: []any{"no"}}), core.KindNotFound, core.ErrNotFound},
+		{wrapDBus("op", dbus.Error{Name: "org.freedesktop.DBus.Error.UnknownMethod", Body: []any{"no"}}), core.KindUnsupported, core.ErrUnsupported},
+		{wrapDBus("op", dbus.Error{Name: "org.freedesktop.DBus.Error.ServiceUnknown", Body: []any{"no"}}), core.KindUnavailable, core.ErrUnavailable},
+		{wrapDBus("op", dbus.Error{Name: "org.freedesktop.NetworkManager.Settings.VersionIdMismatch", Body: []any{"no"}}), core.KindConflict, core.ErrConflict},
+		{wrapDBus("op", dbus.Error{Name: "org.freedesktop.NetworkManager.AgentManager.NoSecrets", Body: []any{"no"}}), core.KindInvalid, core.ErrInvalid},
+		{newErr("op", ErrAuthFailed, "wrong password"), core.KindInvalid, core.ErrInvalid},
+		{newErr("op", ErrNotFound, "no device"), core.KindNotFound, core.ErrNotFound},
+		{newErr("op", ErrTimeout, "slow"), core.KindInternal, context.DeadlineExceeded},
+		{newErr("op", nil, "plain"), core.KindInternal, nil},
+	}
+	for _, tt := range tests {
+		if got := core.KindOf(tt.err); got != tt.kind {
+			t.Errorf("KindOf(%v) = %q, want %q", tt.err, got, tt.kind)
+		}
+		if tt.is != nil && !errors.Is(tt.err, tt.is) {
+			t.Errorf("errors.Is(%v, %v) = false", tt.err, tt.is)
+		}
+	}
+	// The hint travels structurally, not inside the message.
+	err := wrapDBus("op", dbus.Error{Name: "org.freedesktop.NetworkManager.PermissionDenied", Body: []any{"Not authorized"}})
+	if core.HintOf(err) != polkitHint {
+		t.Errorf("HintOf = %q", core.HintOf(err))
+	}
+	if !errors.Is(ErrTimeout, context.DeadlineExceeded) || errors.Is(ErrNotFound, context.DeadlineExceeded) {
+		t.Error("ErrTimeout alone must be a deadline error")
 	}
 }
 

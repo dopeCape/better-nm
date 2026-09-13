@@ -22,6 +22,8 @@ import (
 	"strconv"
 	"syscall"
 	"time"
+
+	"github.com/dopeCape/better-nm/internal/core"
 )
 
 // Socket candidates, in order. Fedora/Debian/Arch/NixOS all ship /run/tailscale.
@@ -33,12 +35,14 @@ var socketCandidates = []string{
 // LocalAPIHost is the Host header tailscaled requires on Unix-socket requests.
 const LocalAPIHost = "local-tailscaled.sock"
 
+// Sentinels carry their core.ErrorKind so the API and CLI classify them
+// (403 / 503) instead of reporting "internal".
 var (
 	// ErrAccessDenied is returned when tailscaled answers 403: the calling uid
 	// is neither root nor the configured operator (or the request was malformed).
-	ErrAccessDenied = errors.New("tailscale: access denied")
+	ErrAccessDenied = core.Errorf(core.KindPermission, "", "tailscale: access denied")
 	// ErrUnavailable is returned when the socket does not exist or nothing listens on it.
-	ErrUnavailable = errors.New("tailscale: tailscaled is not running")
+	ErrUnavailable = core.Errorf(core.KindUnavailable, "install tailscale and start tailscaled", "tailscale: tailscaled is not running")
 )
 
 // HTTPError is a non-2xx LocalAPI answer other than 403.

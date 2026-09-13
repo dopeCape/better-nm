@@ -358,11 +358,10 @@ func (m *Monitor) round(ctx context.Context) {
 	}
 	m.log.Debug("round", "key", key, "state", state)
 
+	// Events are emitted, not stored: the daemon owns history and persists
+	// what it reads from Events() (storing here too wrote every event twice).
 	for _, tr := range transitions {
 		if ev, ok := eventFor(tr); ok {
-			if err := m.st.AddEvent(ctx, ev); err != nil {
-				m.log.Warn("store event", "type", ev.Type, "err", err)
-			}
 			m.log.Info(ev.Title, "key", key, "body", ev.Body)
 			select {
 			case m.events <- ev:

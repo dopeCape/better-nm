@@ -62,7 +62,16 @@ func (e *RateLimitedError) Error() string {
 	return fmt.Sprintf("speed: rate limited during %s", e.Phase)
 }
 
-func (e *RateLimitedError) Unwrap() error { return ErrRateLimited }
+// Unwrap matches ErrRateLimited and core.ErrUnavailable (the API answers 503).
+func (e *RateLimitedError) Unwrap() []error { return []error{ErrRateLimited, core.ErrUnavailable} }
+
+// Hint tells the caller what to do (core.HintOf).
+func (e *RateLimitedError) Hint() string {
+	if e.RetryAfter > 0 {
+		return "wait " + e.RetryAfter.String() + " before running another speed test"
+	}
+	return "wait a minute before running another speed test"
+}
 
 // stage is one rung of the download/upload ramp.
 type stage struct {

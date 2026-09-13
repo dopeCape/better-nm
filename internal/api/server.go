@@ -21,6 +21,7 @@ import (
 
 	"github.com/dopeCape/better-nm/internal/core"
 	"github.com/dopeCape/better-nm/internal/daemon"
+	"github.com/dopeCape/better-nm/internal/diag"
 	"github.com/dopeCape/better-nm/internal/version"
 )
 
@@ -692,6 +693,15 @@ func (s *Server) diagLAN(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	hosts, err := s.d.Diag().LANHosts(r.Context(), device, queryBool(r, "sweep"))
+	var se *diag.SweepError
+	if errors.As(err, &se) {
+		// The sweep could not run (no ping socket on this kernel) but the
+		// neighbour table is valid: answer with it and say why in a header
+		// instead of failing the whole call.
+		s.log.Warn("diag: lan sweep skipped", "device", device, "err", err, "hint", core.HintOf(err))
+		w.Header().Set("Warning", `199 - "`+strings.ReplaceAll(err.Error(), `"`, `'`)+`"`)
+		err = nil
+	}
 	if err != nil {
 		writeError(w, err)
 		return

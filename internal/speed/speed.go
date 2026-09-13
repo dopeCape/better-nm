@@ -2,15 +2,15 @@ package speed
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net/http"
+	"sync"
 
 	"github.com/dopeCape/better-nm/internal/core"
 )
 
 // ErrUnknownProvider is returned by a tester built for a provider bnm does not know.
-var ErrUnknownProvider = errors.New("speed: unknown provider (use cloudflare or iperf3)")
+var ErrUnknownProvider = core.Errorf(core.KindInvalid, "use cloudflare or iperf3", "speed: unknown provider")
 
 // Option configures New.
 type Option func(*options)
@@ -54,6 +54,39 @@ func New(provider string, opts ...Option) core.SpeedTester {
 	default:
 		return errTester{fmt.Errorf("%w: %q", ErrUnknownProvider, provider)}
 	}
+}
+
+// Dispatcher is a core.SpeedTester that picks the provider per Run from
+// SpeedOptions.Provider ("" = cloudflare), so one tester serves every
+// provider the config or a request may name. Testers are built once per
+// provider with the given options.
+type Dispatcher struct {
+	opts    []Option
+	mu      sync.Mutex
+	testers map[string]core.SpeedTester
+}
+
+var _ core.SpeedTester = (*Dispatcher)(nil)
+
+// NewDispatcher returns a Dispatcher; opts apply to every provider it builds.
+func NewDispatcher(opts ...Option) *Dispatcher {
+	return &Dispatcher{opts: opts, testers: map[string]core.SpeedTester{}}
+}
+
+// Run implements core.SpeedTester.
+func (d *Dispatcher) Run(ctx context.Context, opts core.SpeedOptions, progress func(core.SpeedProgress)) (core.SpeedResult, error) {
+	provider := opts.Provider
+	if provider == "" {
+		provider = ProviderCloudflare
+	}
+	d.mu.Lock()
+	t, ok := d.testers[provider]
+	if !ok {
+		t = New(provider, d.opts...)
+		d.testers[provider] = t
+	}
+	d.mu.Unlock()
+	return t.Run(ctx, opts, progress)
 }
 
 // errTester always fails with a fixed error.

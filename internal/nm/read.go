@@ -297,16 +297,36 @@ func (c *Client) Status(ctx context.Context) (core.Status, error) {
 	return st, nil
 }
 
-// Permissions calls GetPermissions: polkit action -> yes|auth|no.
+// Permissions returns GetPermissions: polkit action -> yes|auth|no. The
+// answer is cached until NM says it may have changed (CheckPermissions, or NM
+// leaving/joining the bus): Status runs on every NM signal batch, including
+// the access-point strength updates that arrive every few seconds on Wi-Fi,
+// and each GetPermissions costs NM a polkit check per action.
 func (c *Client) Permissions(ctx context.Context) (map[string]string, error) {
-	var perms map[string]string
-	if err := c.call(ctx, pathNM, ifaceNM+".GetPermissions", nil, &perms); err != nil {
-		return nil, wrapDBus("get permissions", err)
+	c.permMu.Lock()
+	defer c.permMu.Unlock()
+	if c.perms == nil {
+		var perms map[string]string
+		if err := c.call(ctx, pathNM, ifaceNM+".GetPermissions", nil, &perms); err != nil {
+			return nil, wrapDBus("get permissions", err)
+		}
+		if perms == nil {
+			perms = map[string]string{}
+		}
+		c.perms = perms
 	}
-	if perms == nil {
-		perms = map[string]string{}
+	out := make(map[string]string, len(c.perms))
+	for k, v := range c.perms {
+		out[k] = v
 	}
-	return perms, nil
+	return out, nil
+}
+
+// invalidatePermissions drops the cached GetPermissions answer.
+func (c *Client) invalidatePermissions() {
+	c.permMu.Lock()
+	c.perms = nil
+	c.permMu.Unlock()
 }
 
 // ---- Profiles ----

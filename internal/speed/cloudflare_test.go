@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -319,6 +320,9 @@ func TestRateLimitIsSoftError(t *testing.T) {
 	if !errors.As(err, &rl) || rl.RetryAfter != 30*time.Second || rl.Phase != "latency" {
 		t.Errorf("RateLimitedError = %+v", rl)
 	}
+	if core.KindOf(err) != core.KindUnavailable || !strings.Contains(core.HintOf(err), "30s") {
+		t.Errorf("kind = %s hint = %q, want unavailable with the retry-after", core.KindOf(err), core.HintOf(err))
+	}
 	if res.Provider != ProviderCloudflare || res.Duration <= 0 {
 		t.Errorf("partial result = %+v", res)
 	}
@@ -369,6 +373,27 @@ func TestServerErrorIsReported(t *testing.T) {
 	c := &Cloudflare{BaseURL: srv.URL, Client: srv.Client()}
 	if _, err := c.Run(context.Background(), core.SpeedOptions{}, nil); err == nil || !strings.Contains(err.Error(), "502") {
 		t.Errorf("err = %v, want HTTP 502 mention", err)
+	}
+}
+
+// The daemon builds one tester at startup but every request names its own
+// provider: the Dispatcher must route on SpeedOptions.Provider per call.
+func TestDispatcherRoutesPerRequest(t *testing.T) {
+	f := newFakeCF(t)
+	d := NewDispatcher(WithBaseURL(f.srv.URL), WithHTTPClient(f.srv.Client()), WithIperf3Binary(filepath.Join(t.TempDir(), "no-iperf3")))
+	ctx := context.Background()
+	res, err := d.Run(ctx, core.SpeedOptions{Quick: true}, nil)
+	if err != nil || res.Provider != ProviderCloudflare {
+		t.Fatalf("default provider: %+v %v", res, err)
+	}
+	if _, err := d.Run(ctx, core.SpeedOptions{Provider: ProviderIperf3, Server: "10.0.0.2"}, nil); !errors.Is(err, ErrIperf3Missing) {
+		t.Errorf("iperf3 request went elsewhere: %v", err)
+	}
+	if _, err := d.Run(ctx, core.SpeedOptions{Provider: "ookla"}, nil); !errors.Is(err, ErrUnknownProvider) {
+		t.Errorf("unknown provider: %v", err)
+	}
+	if len(d.testers) != 3 {
+		t.Errorf("testers cached = %d, want 3", len(d.testers))
 	}
 }
 

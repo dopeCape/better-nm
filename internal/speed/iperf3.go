@@ -15,12 +15,14 @@ import (
 	"github.com/dopeCape/better-nm/internal/core"
 )
 
-// ErrIperf3Missing means the iperf3 binary is not on PATH.
-var ErrIperf3Missing = errors.New("speed: iperf3 not found; install it " +
-	"(apt install iperf3 / dnf install iperf3 / pacman -S iperf3 / nix-env -iA nixpkgs.iperf3)")
+// ErrIperf3Missing means the iperf3 binary is not on PATH (core.KindUnsupported;
+// the hint says how to install it).
+var ErrIperf3Missing = core.Errorf(core.KindUnsupported,
+	"install iperf3 (apt install iperf3 / dnf install iperf3 / pacman -S iperf3 / nix-env -iA nixpkgs.iperf3)",
+	"speed: iperf3 not found")
 
 // ErrServerRequired means the iperf3 provider was used without a host.
-var ErrServerRequired = errors.New("speed: iperf3 needs a server (host[:port])")
+var ErrServerRequired = core.Errorf(core.KindInvalid, "pass --server host[:port] or set speed.iperf3_server", "speed: iperf3 needs a server")
 
 // Iperf3 implements core.SpeedTester by running the distro's iperf3 client
 // twice (upload, then -R for download) with -J and parsing the JSON.

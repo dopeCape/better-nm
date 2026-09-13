@@ -5,6 +5,7 @@ import (
 	"errors"
 	"log/slog"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -318,10 +319,21 @@ func TestSignalsUpdateCacheAndWatch(t *testing.T) {
 	if vU32(c.propsOf(pathNM, ifaceNM), "State") != 20 {
 		t.Fatal("NM State not updated")
 	}
-	// CheckPermissions and VpnStateChanged.
+	// CheckPermissions and VpnStateChanged. Permissions are served from the
+	// cache (no bus round trip per Status) until CheckPermissions drops it.
+	c.perms = map[string]string{permWifiScan: "yes"}
+	if st, err := c.Status(ctx); err != nil || st.Permissions[permWifiScan] != "yes" {
+		t.Fatalf("status permissions = %v %v", st.Permissions, err)
+	}
+	if p, _ := c.Permissions(ctx); p[permWifiScan] != "yes" {
+		t.Fatalf("permissions not served from the cache: %v", p)
+	}
 	c.handle(&dbus.Signal{Path: pathNM, Name: ifaceNM + ".CheckPermissions"})
 	if h := <-ch; h.Kind != core.ChangeStatus {
 		t.Fatalf("hint %+v", h)
+	}
+	if c.perms != nil {
+		t.Fatal("CheckPermissions must drop the cached permissions")
 	}
 	c.handle(&dbus.Signal{Path: pAC2, Name: ifaceVPN + ".VpnStateChanged", Body: []any{uint32(5), uint32(0)}})
 	if h := <-ch; h.Kind != core.ChangeVPN {
@@ -341,6 +353,29 @@ func TestSignalsUpdateCacheAndWatch(t *testing.T) {
 			t.Fatal("watch channel not closed after ctx cancel")
 		}
 	}
+}
+
+// InterfacesRemoved used to iterate an object's interface map outside the
+// lock while API goroutines (editSettings -> fetchObject, setProps) write it.
+func TestInterfacesRemovedRacesWithCacheWrites(t *testing.T) {
+	c := newTestClient(t)
+	const p dbus.ObjectPath = "/org/freedesktop/NetworkManager/Settings/9"
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		for i := 0; i < 500; i++ {
+			c.setProps(p, ifaceConnection, props{"Filename": mv("/x")}, nil)
+			c.setProps(p, ifaceActive, props{"Id": mv("y")}, nil)
+		}
+	}()
+	go func() {
+		defer wg.Done()
+		for i := 0; i < 500; i++ {
+			c.handle(&dbus.Signal{Path: pathRoot, Name: ifaceObjectManager + ".InterfacesRemoved", Body: []any{p, []string{ifaceConnection}}})
+		}
+	}()
+	wg.Wait()
 }
 
 func TestWatchDropsWhenFull(t *testing.T) {

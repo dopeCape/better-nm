@@ -602,9 +602,17 @@ func (d *Daemon) syncMonitorNetwork() {
 
 // emitEvents persists, broadcasts and queues events for notification.
 func (d *Daemon) emitEvents(ctx context.Context, evs []core.Event) {
+	if len(evs) == 0 {
+		return
+	}
+	// ctx may be an API request's: the event is a fact about the world and
+	// belongs in history even when that client has gone away, so the store
+	// write is bounded on its own rather than cancelled with the request.
+	sctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+	defer cancel()
 	for _, e := range evs {
 		e := e
-		if err := d.o.Store.AddEvent(ctx, e); err != nil {
+		if err := d.o.Store.AddEvent(sctx, e); err != nil {
 			d.log.Warn("store event failed", "type", e.Type, "err", err)
 		}
 		d.log.Info("event", "type", e.Type, "title", e.Title, "network", e.NetworkKey)

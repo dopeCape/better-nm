@@ -136,8 +136,11 @@ func TestIperf3MissingBinary(t *testing.T) {
 	if !errors.Is(err, ErrIperf3Missing) {
 		t.Fatalf("err = %v, want ErrIperf3Missing", err)
 	}
-	if !strings.Contains(err.Error(), "install") {
-		t.Errorf("error lacks an install hint: %v", err)
+	if !strings.Contains(core.HintOf(err), "install") {
+		t.Errorf("error lacks an install hint: %v (hint %q)", err, core.HintOf(err))
+	}
+	if core.KindOf(err) != core.KindUnsupported {
+		t.Errorf("kind = %s, want unsupported", core.KindOf(err))
 	}
 }
 

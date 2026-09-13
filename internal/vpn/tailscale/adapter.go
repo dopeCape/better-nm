@@ -275,7 +275,8 @@ func (a *Adapter) write(op string, fn func() error) error {
 		return nil
 	case errors.Is(err, ErrAccessDenied):
 		a.setWritable(false)
-		return fmt.Errorf("tailscale: %s: %w: %s", op, err, a.OperatorHint())
+		// The hint travels structurally (core.HintOf), not inside the message.
+		return core.Wrap(core.KindPermission, a.OperatorHint(), fmt.Errorf("tailscale: %s: %w", op, err))
 	default:
 		return fmt.Errorf("tailscale: %s: %w", op, err)
 	}
@@ -283,7 +284,7 @@ func (a *Adapter) write(op string, fn func() error) error {
 
 func checkID(id string) error {
 	if id != VPNID {
-		return fmt.Errorf("tailscale: unknown VPN id %q", id)
+		return core.Errorf(core.KindNotFound, "", "tailscale: unknown VPN id %q", id)
 	}
 	return nil
 }
@@ -339,7 +340,7 @@ func (a *Adapter) SetExitNode(ctx context.Context, peer string, allowLAN bool) e
 			return err
 		}
 		if !p.ExitNodeOption {
-			return fmt.Errorf("tailscale: set exit node: %q does not offer an exit node", peer)
+			return core.Errorf(core.KindInvalid, "", "tailscale: set exit node: %q does not offer an exit node", peer)
 		}
 		mp.ExitNodeID = p.ID
 	}
@@ -377,11 +378,11 @@ func resolvePeer(st *Status, ref string) (*PeerStatus, error) {
 	}
 	switch len(byName) {
 	case 0:
-		return nil, fmt.Errorf("tailscale: no peer matches %q", ref)
+		return nil, core.Errorf(core.KindNotFound, "run `bnm vpn` to list peers", "tailscale: no peer matches %q", ref)
 	case 1:
 		return byName[0], nil
 	}
-	return nil, fmt.Errorf("tailscale: ambiguous peer %q (%d matches); use its ID or IP", ref, len(byName))
+	return nil, core.Errorf(core.KindInvalid, "use its ID or IP", "tailscale: ambiguous peer %q (%d matches)", ref, len(byName))
 }
 
 // UseExitNode implements core.TailscaleControl.

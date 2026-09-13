@@ -17,11 +17,12 @@
 package diag
 
 import (
-	"errors"
 	"fmt"
 	"time"
 
 	"github.com/vishvananda/netlink"
+
+	"github.com/dopeCape/better-nm/internal/core"
 )
 
 // Netlink access is wrapped in package-level vars so tests can swap in fakes.
@@ -36,7 +37,9 @@ var (
 
 // ErrNeedsPingGroup is returned (wrapped) when the ICMP datagram socket is
 // refused; the LAN table is still returned alongside it.
-var ErrNeedsPingGroup = errors.New("diag: ping socket refused (EACCES); one-time fix: add `net.ipv4.ping_group_range = 0 2147483647` to /etc/sysctl.d/50-bnm.conf and run `sysctl --system`")
+var ErrNeedsPingGroup = core.Errorf(core.KindUnsupported,
+	"one-time fix: add `net.ipv4.ping_group_range = 0 2147483647` to /etc/sysctl.d/50-bnm.conf and run `sysctl --system`",
+	"diag: ping socket refused (EACCES)")
 
 // clockTick is the kernel's USER_HZ used for neighbour timestamps.
 const clockTick = 100
