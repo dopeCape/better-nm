@@ -591,6 +591,10 @@ func (m *Model) footer() string {
 	if m.tab == tabVPN {
 		globals = keyHints("?", "help", "E", "events", "q", "quit")
 	}
+	if m.over == overlayNone && m.pane(m.tab).capturing() {
+		// a text input has the keys: q, ?, e would be typed, not acted on
+		globals = keyHints("ctrl-c", "quit")
+	}
 	left := " " + hints + "  " + globals
 	var right string
 	switch {

@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -153,7 +154,7 @@ func (t *vpnTab) key(m *Model, k tea.KeyMsg) tea.Cmd {
 
 func (t *vpnTab) toggle(m *Model) tea.Cmd {
 	v := t.selected()
-	if v == nil {
+	if v == nil || t.busy != "" { // one request at a time; a second Enter would undo the first
 		return nil
 	}
 	switch v.State {
@@ -179,6 +180,10 @@ func (t *vpnTab) toggle(m *Model) tea.Cmd {
 	}
 }
 
+// importFile reads a .conf/.ovpn here and sends its content inline, like the
+// CLI does: the daemon may run as a service with another working directory
+// (so a relative path would not resolve there) and a leading ~ is only the
+// shell's convention.
 func (t *vpnTab) importFile(m *Model, path string) tea.Cmd {
 	kind := ""
 	switch strings.ToLower(filepath.Ext(path)) {
@@ -190,10 +195,28 @@ func (t *vpnTab) importFile(m *Model, path string) tea.Cmd {
 		m.setFlash("add: expected a .conf (WireGuard) or .ovpn (OpenVPN) file", true)
 		return m.flashTimer()
 	}
+	path = expandHome(path)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		m.setFlash("add: "+err.Error(), true)
+		return m.flashTimer()
+	}
+	name := strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))
+	req := api.ImportVPNRequest{Kind: kind, Name: name, Content: string(data)}
 	return m.l.action(int(tabVPN), "import "+filepath.Base(path), func(ctx context.Context) error {
-		_, err := m.l.c.ImportVPN(ctx, api.ImportVPNRequest{Kind: kind, Path: path})
+		_, err := m.l.c.ImportVPN(ctx, req)
 		return err
 	})
+}
+
+// expandHome replaces a leading ~/ with the home directory.
+func expandHome(path string) string {
+	if path == "~" || strings.HasPrefix(path, "~/") {
+		if home, err := os.UserHomeDir(); err == nil {
+			return filepath.Join(home, strings.TrimPrefix(path, "~"))
+		}
+	}
+	return path
 }
 
 func (t *vpnTab) pickerKey(m *Model, k tea.KeyMsg) tea.Cmd {

@@ -431,6 +431,50 @@ func TestVPNToggleSendsRequest(t *testing.T) {
 	h.typeText("/tmp/x.txt")
 	h.key("enter")
 	mustContain(t, h.view(), "expected a .conf")
+	// while the file box has focus the footer must not promise q quits
+	h.key("a")
+	mustNotContain(t, h.view(), "q quit")
+	mustContain(t, h.view(), "ctrl-c quit")
+	h.key("esc")
+	mustNotContain(t, h.view(), "ctrl-c quit")
+}
+
+func TestVPNImportReadsTheFileLocally(t *testing.T) {
+	r := newRig(t)
+	h := newHarness(t, r, 100, 30)
+	h.key("3")
+	dir := t.TempDir()
+	conf := "[Interface]\nPrivateKey = abc=\nAddress = 10.0.0.2/24\n[Peer]\nPublicKey = def=\nEndpoint = vpn.example:51820\nAllowedIPs = 0.0.0.0/0\n"
+	if err := os.WriteFile(filepath.Join(dir, "office.conf"), []byte(conf), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	// The path is relative to the TUI's working directory (which a daemon
+	// running as a service does not share), so the content must be sent inline.
+	t.Chdir(dir)
+	h.key("a")
+	h.typeText("office.conf")
+	h.key("enter")
+	if h.m.vpn.lastErr != nil {
+		t.Fatalf("import: %v", h.m.vpn.lastErr)
+	}
+	ps, _ := r.nm.Profiles(context.Background())
+	found := false
+	for _, p := range ps {
+		if p.Type == core.ProfileWireGuard && p.Name == "office" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("no WireGuard profile named office after import; profiles: %+v", ps)
+	}
+	// a missing file is reported in the flash, not sent to the daemon
+	h.key("a")
+	h.typeText("nope.conf")
+	h.key("enter")
+	mustContain(t, h.view(), "add: open nope.conf")
+	if h.m.vpn.adding {
+		t.Error("the file box should close after enter")
+	}
 }
 
 func TestDisconnectedEventUpdatesStatusBarAndFooter(t *testing.T) {
