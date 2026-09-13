@@ -5,6 +5,7 @@ import (
 	"errors"
 	"log/slog"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -341,6 +342,29 @@ func TestSignalsUpdateCacheAndWatch(t *testing.T) {
 			t.Fatal("watch channel not closed after ctx cancel")
 		}
 	}
+}
+
+// InterfacesRemoved used to iterate an object's interface map outside the
+// lock while API goroutines (editSettings -> fetchObject, setProps) write it.
+func TestInterfacesRemovedRacesWithCacheWrites(t *testing.T) {
+	c := newTestClient(t)
+	const p dbus.ObjectPath = "/org/freedesktop/NetworkManager/Settings/9"
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		for i := 0; i < 500; i++ {
+			c.setProps(p, ifaceConnection, props{"Filename": mv("/x")}, nil)
+			c.setProps(p, ifaceActive, props{"Id": mv("y")}, nil)
+		}
+	}()
+	go func() {
+		defer wg.Done()
+		for i := 0; i < 500; i++ {
+			c.handle(&dbus.Signal{Path: pathRoot, Name: ifaceObjectManager + ".InterfacesRemoved", Body: []any{p, []string{ifaceConnection}}})
+		}
+	}()
+	wg.Wait()
 }
 
 func TestWatchDropsWhenFull(t *testing.T) {

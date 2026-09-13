@@ -445,10 +445,15 @@ func (c *Client) handle(sig *dbus.Signal) {
 			return
 		}
 		path, _ := sig.Body[0].(dbus.ObjectPath)
+		// Copy the interface names under the lock: fetchObject (called from
+		// API goroutines) writes this inner map in place.
 		c.mu.RLock()
-		ifaces := c.objs[path]
+		ifaces := make([]string, 0, len(c.objs[path]))
+		for iface := range c.objs[path] {
+			ifaces = append(ifaces, iface)
+		}
 		c.mu.RUnlock()
-		for iface := range ifaces {
+		for _, iface := range ifaces {
 			c.hintFor(iface, path)
 		}
 		c.removeObject(path)
