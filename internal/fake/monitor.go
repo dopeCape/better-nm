@@ -55,6 +55,12 @@ func (m *Monitor) SetNetwork(networkKey, gateway string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.networks = append(m.networks, NetworkCall{networkKey, gateway})
+	if networkKey != "" && m.status.NetworkKey == networkKey && len(m.status.Anchors) > 0 {
+		// Same network again: keep whatever state was seeded, like the real
+		// monitor keeps its warm baselines. Avoids racing tests that SetStatus
+		// before the daemon's startup SetNetwork lands.
+		return
+	}
 	m.status.NetworkKey = networkKey
 	if networkKey == "" {
 		m.status.State = core.BaselineIdle
