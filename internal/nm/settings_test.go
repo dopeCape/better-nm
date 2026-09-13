@@ -2,7 +2,9 @@ package nm
 
 import (
 	"errors"
+	"fmt"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -463,5 +465,51 @@ func TestVariantReaders(t *testing.T) {
 	}
 	if realPath("/") || realPath("") || !realPath("/a") {
 		t.Error("realPath")
+	}
+}
+
+func TestDecodeProfileVPNDataAndWireGuard(t *testing.T) {
+	s := settingsDict{
+		settingConnection: {
+			"uuid": dbus.MakeVariant("u1"), "id": dbus.MakeVariant("work"), "type": dbus.MakeVariant("vpn"),
+		},
+		settingVPN: {
+			"service-type": dbus.MakeVariant("org.freedesktop.NetworkManager.openvpn"),
+			"data": dbus.MakeVariant(map[string]string{
+				"remote": "vpn.example.com:1194:udp", "username": "me", "password-flags": "1",
+			}),
+		},
+	}
+	p := decodeProfile("/p", s, connMeta{}, false)
+	if p.VPNData["remote"] != "vpn.example.com:1194:udp" || p.VPNData["username"] != "me" {
+		t.Fatalf("vpn data not decoded: %#v", p.VPNData)
+	}
+	if _, ok := p.VPNData["password-flags"]; ok {
+		t.Fatalf("flag keys should be dropped: %#v", p.VPNData)
+	}
+
+	wg := settingsDict{
+		settingConnection: {"uuid": dbus.MakeVariant("u2"), "id": dbus.MakeVariant("wg0"), "type": dbus.MakeVariant("wireguard")},
+		settingWireGuard: {
+			"private-key": dbus.MakeVariant("SECRET"),
+			"listen-port": dbus.MakeVariant(uint32(51820)),
+			"mtu":         dbus.MakeVariant(uint32(1420)),
+			"peers": dbus.MakeVariant([]map[string]dbus.Variant{{
+				"public-key":           dbus.MakeVariant("PUB"),
+				"endpoint":             dbus.MakeVariant("1.2.3.4:51820"),
+				"allowed-ips":          dbus.MakeVariant([]string{"0.0.0.0/0"}),
+				"persistent-keepalive": dbus.MakeVariant(uint32(25)),
+			}}),
+		},
+	}
+	q := decodeProfile("/q", wg, connMeta{}, false)
+	if q.WireGuard == nil || q.WireGuard.ListenPort != 51820 || q.WireGuard.MTU != 1420 {
+		t.Fatalf("wireguard setting not decoded: %#v", q.WireGuard)
+	}
+	if len(q.WireGuard.Peers) != 1 || q.WireGuard.Peers[0].PublicKey != "PUB" || q.WireGuard.Peers[0].PersistentKeepalive != 25 {
+		t.Fatalf("peer not decoded: %#v", q.WireGuard.Peers)
+	}
+	if strings.Contains(fmt.Sprint(q), "SECRET") {
+		t.Fatal("private key leaked into Profile")
 	}
 }

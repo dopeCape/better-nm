@@ -424,6 +424,20 @@ func decodeProfile(path dbus.ObjectPath, s settingsDict, meta connMeta, active b
 	}
 	if v := s[settingVPN]; v != nil {
 		p.VPNServiceType = vStr(v, "service-type")
+		if data := vStrMap(v, "data"); len(data) > 0 {
+			p.VPNData = make(map[string]string, len(data))
+			for k, val := range data {
+				// vpn.data holds only non-secret keys; secrets live in vpn.secrets,
+				// which GetSettings never returns. Flag keys are noise for callers.
+				if strings.HasSuffix(k, "-flags") {
+					continue
+				}
+				p.VPNData[k] = val
+			}
+		}
+	}
+	if wg := s[settingWireGuard]; wg != nil {
+		p.WireGuard = decodeWireGuardSetting(wg)
 	}
 	if ip := s[settingIPv4]; ip != nil {
 		p.IPv4 = decodeIPConfig(ip, 4)
@@ -432,6 +446,26 @@ func decodeProfile(path dbus.ObjectPath, s settingsDict, meta connMeta, active b
 		p.IPv6 = decodeIPConfig(ip, 6)
 	}
 	return p
+}
+
+// decodeWireGuardSetting reads the non-secret part of an NM wireguard setting.
+// The private key is never copied out.
+func decodeWireGuardSetting(wg props) *core.WireGuardSetting {
+	out := &core.WireGuardSetting{
+		ListenPort: int(vU32(wg, "listen-port")),
+		FwMark:     int(vU32(wg, "fwmark")),
+		MTU:        int(vU32(wg, "mtu")),
+	}
+	for _, peer := range vDicts(wg, "peers") {
+		pp := core.WireGuardPeer{
+			PublicKey:           vStr(peer, "public-key"),
+			Endpoint:            vStr(peer, "endpoint"),
+			AllowedIPs:          vStrs(peer, "allowed-ips"),
+			PersistentKeepalive: int(vU32(peer, "persistent-keepalive")),
+		}
+		out.Peers = append(out.Peers, pp)
+	}
+	return out
 }
 
 // ssidString renders an SSID; non-UTF-8 SSIDs are shown as escaped bytes.
