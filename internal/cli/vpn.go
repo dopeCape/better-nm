@@ -159,14 +159,20 @@ func (a *app) vpnSwitch(ctx context.Context, arg string, up bool) error {
 		return err
 	}
 	final := a.waitVPN(ctx, c, v.ID, up)
-	if a.jsonOut {
-		if a.quiet {
-			return nil
-		}
-		return a.printJSON(final)
+	// A VPN that settled in "error" is a failed action whatever the output
+	// mode: -q and --json must still exit 1.
+	var failed error
+	if up && final.State == core.VPNError {
+		failed = core.Errorf(core.KindInternal, final.Detail, "%s failed: %s", final.Name, orDash(final.Error))
 	}
 	if a.quiet {
-		return nil
+		return failed
+	}
+	if a.jsonOut {
+		if err := a.printJSON(final); err != nil {
+			return err
+		}
+		return failed
 	}
 	line := fmt.Sprintf("%s %s %s", a.ui.vpnDot(final.State), final.Name, a.ui.vpnState(final.State))
 	if d := vpnDetail(final); d != "" {
@@ -176,10 +182,7 @@ func (a *app) vpnSwitch(ctx context.Context, arg string, up bool) error {
 	if final.State == core.VPNNeedsAuth && final.AuthURL != "" {
 		fmt.Fprintf(a.out, "open %s to log in\n", final.AuthURL)
 	}
-	if up && final.State == core.VPNError {
-		return core.Errorf(core.KindInternal, final.Detail, "%s failed: %s", final.Name, orDash(final.Error))
-	}
-	return nil
+	return failed
 }
 
 // waitVPN polls until the VPN leaves the transitional state or vpnSettle passes.
