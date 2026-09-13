@@ -96,6 +96,9 @@ type Client struct {
 	subs    map[chan core.Change]struct{}
 	waiters map[dbus.ObjectPath][]chan activeEvent
 
+	permMu sync.Mutex
+	perms  map[string]string // cached GetPermissions; nil = fetch on next use
+
 	// test seams
 	sysfs    sysfsProbe
 	username string
@@ -478,6 +481,7 @@ func (c *Client) handle(sig *dbus.Signal) {
 		}
 		c.emit(core.ChangeStatus, sig.Path)
 	case ifaceNM + ".CheckPermissions":
+		c.invalidatePermissions()
 		c.emit(core.ChangeStatus, sig.Path)
 
 	case ifaceDevice + ".StateChanged":
@@ -548,6 +552,7 @@ func (c *Client) handle(sig *dbus.Signal) {
 	case ifaceDBus + ".NameOwnerChanged":
 		if len(sig.Body) >= 3 {
 			newOwner, _ := sig.Body[2].(string)
+			c.invalidatePermissions()
 			if newOwner == "" {
 				c.log.Warn("nm: NetworkManager left the bus")
 				c.mu.Lock()

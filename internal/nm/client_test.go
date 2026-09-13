@@ -319,10 +319,21 @@ func TestSignalsUpdateCacheAndWatch(t *testing.T) {
 	if vU32(c.propsOf(pathNM, ifaceNM), "State") != 20 {
 		t.Fatal("NM State not updated")
 	}
-	// CheckPermissions and VpnStateChanged.
+	// CheckPermissions and VpnStateChanged. Permissions are served from the
+	// cache (no bus round trip per Status) until CheckPermissions drops it.
+	c.perms = map[string]string{permWifiScan: "yes"}
+	if st, err := c.Status(ctx); err != nil || st.Permissions[permWifiScan] != "yes" {
+		t.Fatalf("status permissions = %v %v", st.Permissions, err)
+	}
+	if p, _ := c.Permissions(ctx); p[permWifiScan] != "yes" {
+		t.Fatalf("permissions not served from the cache: %v", p)
+	}
 	c.handle(&dbus.Signal{Path: pathNM, Name: ifaceNM + ".CheckPermissions"})
 	if h := <-ch; h.Kind != core.ChangeStatus {
 		t.Fatalf("hint %+v", h)
+	}
+	if c.perms != nil {
+		t.Fatal("CheckPermissions must drop the cached permissions")
 	}
 	c.handle(&dbus.Signal{Path: pAC2, Name: ifaceVPN + ".VpnStateChanged", Body: []any{uint32(5), uint32(0)}})
 	if h := <-ch; h.Kind != core.ChangeVPN {
