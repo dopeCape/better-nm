@@ -293,8 +293,11 @@ func (c *Client) ConnectWifi(ctx context.Context, req core.ConnectWifiRequest) e
 		return wrapDBus(op, err)
 	}
 	if err := c.waitActive(ctx, op, active); err != nil {
-		// Don't leave a profile behind that never worked.
-		if errors.Is(err, ErrAuthFailed) || errors.Is(err, ErrNoSecrets) {
+		// A brand-new profile that never activated is junk (wrong password, SSID
+		// not found, timeout, ...): delete it so a typo does not leave a hidden
+		// profile behind. Only a ctx cancellation keeps it, since the activation
+		// may still succeed after we stopped waiting.
+		if !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
 			_ = c.call(context.WithoutCancel(ctx), connPath, ifaceConnection+".Delete", nil)
 		}
 		return err
