@@ -98,3 +98,12 @@ type Event struct {
 	Urgency    string            `json:"urgency,omitempty"` // low | normal | critical
 	Data       map[string]string `json:"data,omitempty"`
 }
+
+// Secret-agent events. The daemon emits secret-needed when NetworkManager asks it
+// for a secret it does not have (wrong password retry, OTP, unsaved VPN password);
+// Data["request_id"] names the SecretRequest to answer. secret-resolved follows
+// with Data["outcome"] = answered | cancelled | timeout.
+const (
+	EventSecretNeeded   EventType = "secret-needed"
+	EventSecretResolved EventType = "secret-resolved"
+)
