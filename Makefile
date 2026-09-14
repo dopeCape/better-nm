@@ -3,8 +3,9 @@ LDFLAGS := -s -w -X github.com/dopeCape/better-nm/internal/version.Version=$(VER
 BIN := bin
 
 PREFIX ?= $(HOME)/.local
+TAURI_TARGET := desktop/src-tauri/target/release
 
-.PHONY: all build daemon cli desktop test test-race test-integration lint fmt clean run-daemon install uninstall
+.PHONY: all build daemon cli desktop desktop-bundle test test-race test-integration lint fmt clean run-daemon install uninstall
 
 all: build
 
@@ -16,9 +17,17 @@ cli:
 daemon:
 	CGO_ENABLED=0 go build -trimpath -ldflags '$(LDFLAGS)' -o $(BIN)/bnmd ./cmd/bnmd
 
-# Fyne needs cgo and the GL/X11/Wayland headers; on NixOS run this inside `nix develop`.
+# The desktop app is Tauri 2 (Rust shell + React frontend under desktop/). It needs
+# rustc, cargo, node 24, pnpm (which provides the Tauri CLI) and the webkitgtk 4.1 / gtk3 /
+# libayatana-appindicator dev libraries; on NixOS run this inside `nix develop`.
 desktop:
-	go build -trimpath -ldflags '$(LDFLAGS)' -o $(BIN)/bnm-desktop ./cmd/bnm-desktop
+	cd desktop && pnpm install --frozen-lockfile && pnpm tauri build --no-bundle
+	install -Dm755 $(TAURI_TARGET)/bnm-desktop $(BIN)/bnm-desktop
+
+# AppImage, deb and rpm under desktop/src-tauri/target/release/bundle/.
+desktop-bundle:
+	cd desktop && pnpm install --frozen-lockfile && pnpm tauri build
+	@ls -1 $(TAURI_TARGET)/bundle/appimage/*.AppImage $(TAURI_TARGET)/bundle/deb/*.deb $(TAURI_TARGET)/bundle/rpm/*.rpm
 
 # Installs bnm, bnmd and bnm-desktop under $(PREFIX)/bin (default ~/.local/bin, which is
 # on PATH on most desktops) plus the launcher entry and icon. `make desktop` first if you
@@ -58,7 +67,7 @@ fmt:
 	gofmt -w .
 
 clean:
-	rm -rf $(BIN)
+	rm -rf $(BIN) desktop/dist desktop/src-tauri/target
 
 run-daemon: daemon
 	$(BIN)/bnmd --log-level debug
