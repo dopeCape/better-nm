@@ -5,10 +5,10 @@
   "version": "0.1.0",
   "identifier": "io.github.dopecape.bnm",
   "build": {
-    "frontendDist": "devdist",
-    "devUrl": "http://localhost:1420",
-    "beforeDevCommand": "",
-    "beforeBuildCommand": ""
+    "frontendDist": "../dist",
+    "devUrl": "http://localhost:5173",
+    "beforeDevCommand": "pnpm dev",
+    "beforeBuildCommand": "pnpm build"
   },
   "app": {
     "withGlobalTauri": false,
@@ -26,12 +26,18 @@
     ],
     "security": {
       "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob:; connect-src ipc: http://ipc.localhost; object-src 'none'; base-uri 'self'; frame-ancestors 'none'",
-      "dangerousDisableAssetCspModification": ["style-src"]
+      "dangerousDisableAssetCspModification": [
+        "style-src"
+      ]
     }
   },
   "bundle": {
     "active": true,
-    "targets": ["appimage", "deb", "rpm"],
+    "targets": [
+      "appimage",
+      "deb",
+      "rpm"
+    ],
     "category": "Utility",
     "shortDescription": "Wi-Fi, VPNs and network quality in one place",
     "longDescription": "bnm desktop: a NetworkManager front end. Wi-Fi, VPNs (Tailscale, WireGuard, OpenVPN), connection quality monitoring and speed tests, talking to the bnmd user daemon.",
@@ -45,14 +51,22 @@
     "resources": [],
     "linux": {
       "deb": {
-        "depends": ["network-manager"],
-        "recommends": ["libnotify4"],
+        "depends": [
+          "network-manager"
+        ],
+        "recommends": [
+          "libnotify4"
+        ],
         "section": "net",
         "desktopTemplate": "bnm-desktop.desktop.hbs"
       },
       "rpm": {
-        "depends": ["NetworkManager"],
-        "recommends": ["libnotify"],
+        "depends": [
+          "NetworkManager"
+        ],
+        "recommends": [
+          "libnotify"
+        ],
         "desktopTemplate": "bnm-desktop.desktop.hbs"
       },
       "appimage": {
