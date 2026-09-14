@@ -13,6 +13,8 @@ export interface MockShell extends Shell {
   routes: Record<string, Route>;
   emit<K extends ShellEventName>(event: K, payload: ShellEvents[K]): void;
   config: DesktopConfig;
+  /** What `tray_present` answers. */
+  trayPresent: boolean;
 }
 
 export function createMockShell(routes: Record<string, Route> = {}): MockShell {
@@ -23,6 +25,7 @@ export function createMockShell(routes: Record<string, Route> = {}): MockShell {
     requests: [],
     routes,
     config: { ...DEFAULT_CONFIG },
+    trayPresent: false,
     emit: (event, payload) => em.emit(event, payload),
     async invoke<T>(cmd: string, args: Record<string, unknown> = {}): Promise<T> {
       shell.calls.push({ cmd, args });
@@ -50,6 +53,8 @@ export function createMockShell(routes: Record<string, Route> = {}): MockShell {
           return { running: true, socket: "/run/user/1000/bnm/bnmd.sock", unit_installed: false, unit_active: false } as T;
         case "pick_vpn_file":
           return null as T;
+        case "tray_present":
+          return shell.trayPresent as T;
         default:
           return undefined as T;
       }
@@ -67,7 +72,8 @@ export function testQueryClient(): QueryClient {
 }
 
 export function resetUI(): void {
-  useUI.setState({ section: "overview", paletteOpen: false, toasts: [], stream: { connected: true }, secret: null, liveEvents: [], wifiSelected: null, wifiLastScan: null, config: { ...DEFAULT_CONFIG } });
+  useUI.setState({ section: "overview", paletteOpen: false, toasts: [], stream: { connected: true }, secret: null, secretQueue: [], trayPresent: false, liveEvents: [], wifiSelected: null, wifiLastScan: null, config: { ...DEFAULT_CONFIG } });
+  useUI.getState().speedReset();
 }
 
 /** The daemon's 4xx shape. */

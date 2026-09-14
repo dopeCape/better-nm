@@ -1,7 +1,9 @@
 import { useEffect } from "react";
 import { QueryClient, QueryClientProvider, useQueryClient } from "@tanstack/react-query";
 import { DaemonUnreachableError } from "@/api/client";
+import { Icon } from "@/components/Icon";
 import { Banner } from "@/components/ui";
+import { shell } from "@/shell";
 import { useUI } from "@/state/ui";
 import { Devices } from "@/views/Devices";
 import { Overview } from "@/views/Overview";
@@ -38,17 +40,22 @@ function Shell() {
   const stream = useUI((s) => s.stream);
   const View = VIEWS[section];
 
+  // The shell reconnects on its own with backoff; "Check now" asks the daemon
+  // straight away (which auto-starts it when the socket is gone) and refetches.
+  const retry = async () => {
+    try {
+      await shell.streamStart();
+    } catch {
+      /* the stream reports through bnm://stream */
+    }
+    await qc.invalidateQueries();
+  };
+
   useEffect(() => {
-    let off: (() => void) | undefined;
-    let cancelled = false;
-    void startEventRouting(qc).then((o) => {
-      if (cancelled) o();
-      else off = o;
-    });
+    const off = startEventRouting(qc);
     const offKeys = installHotkeys();
     return () => {
-      cancelled = true;
-      off?.();
+      off();
       offKeys();
     };
   }, [qc]);
@@ -66,7 +73,18 @@ function Shell() {
         <main className="content" id="main" tabIndex={-1}>
           <div className="content-inner">
             {!stream.connected && (
-              <Banner tone="error" icon="warning-circle-fill" title="Daemon unreachable, retrying" className="mb-6">
+              <Banner
+                tone="error"
+                icon="warning-circle-fill"
+                title="Daemon unreachable, retrying"
+                className="mb-4"
+                actions={
+                  <button type="button" className="btn" onClick={() => void retry()}>
+                    <Icon name="arrows-clockwise" />
+                    Check now
+                  </button>
+                }
+              >
                 {stream.error ? `${stream.error}. ` : ""}
                 {stream.attempt ? `Attempt ${stream.attempt}. ` : ""}
                 Values shown may be stale; run <span className="mono">bnm daemon status</span> if this persists.

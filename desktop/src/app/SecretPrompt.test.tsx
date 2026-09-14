@@ -36,7 +36,7 @@ describe("secret prompt", () => {
 
   it("opens on secret-needed after window_show, submits {secrets, save}, closes on secret-resolved", async () => {
     const qc = testQueryClient();
-    const off = await startEventRouting(qc);
+    const off = startEventRouting(qc);
     render(
       <QueryClientProvider client={qc}>
         <SecretPrompt />

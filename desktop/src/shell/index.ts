@@ -59,5 +59,9 @@ export const shell = {
   daemonInstall: () => getShell().invoke("daemon_install"),
   daemonRestart: () => getShell().invoke("daemon_restart"),
   windowShow: () => getShell().invoke("window_show"),
+  windowHide: () => getShell().invoke("window_hide"),
+  windowClose: () => getShell().invoke("window_close"),
+  trayPresent: () => getShell().invoke<boolean>("tray_present"),
+  configReveal: () => getShell().invoke("config_reveal"),
   notify: (title: string, body: string) => getShell().invoke("notify", { title, body }),
 };

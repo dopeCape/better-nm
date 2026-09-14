@@ -41,8 +41,18 @@ interface UIState {
   stream: StreamState;
   setStream: (s: StreamState) => void;
 
+  /** The prompt being shown: the head of `secretQueue`. */
   secret: SecretRequest | null;
+  /** Every pending request, in arrival order; the daemon may raise several at once. */
+  secretQueue: SecretRequest[];
+  /** A request enqueues (once per id); null dismisses the one being shown and moves on. */
   setSecret: (r: SecretRequest | null) => void;
+  /** Drops a request wherever it sits in the queue (secret-resolved, answered, cancelled). */
+  removeSecret: (id: string) => void;
+
+  /** Whether the shell has a tray icon right now (from `tray_present`). */
+  trayPresent: boolean;
+  setTrayPresent: (on: boolean) => void;
 
   liveEvents: Event[];
   pushEvent: (e: Event) => void;
@@ -84,7 +94,20 @@ export const useUI = create<UIState>((set) => ({
   setStream: (stream) => set({ stream }),
 
   secret: null,
-  setSecret: (secret) => set({ secret }),
+  secretQueue: [],
+  setSecret: (r) =>
+    set((s) => {
+      const queue = r === null ? s.secretQueue.slice(1) : s.secretQueue.some((q) => q.id === r.id) ? s.secretQueue.map((q) => (q.id === r.id ? r : q)) : [...s.secretQueue, r];
+      return { secretQueue: queue, secret: queue[0] ?? null };
+    }),
+  removeSecret: (id) =>
+    set((s) => {
+      const queue = s.secretQueue.filter((q) => q.id !== id);
+      return { secretQueue: queue, secret: queue[0] ?? null };
+    }),
+
+  trayPresent: false,
+  setTrayPresent: (trayPresent) => set({ trayPresent }),
 
   liveEvents: [],
   pushEvent: (e) => set((s) => ({ liveEvents: [e, ...s.liveEvents].slice(0, 100) })),

@@ -32,7 +32,9 @@ picks `src/shell/http.ts`, which implements every shell command over HTTP:
 - Desktop config (`config_get` / `config_set` / `bnm://config`) lives in
   `localStorage["bnmdesktop.config"]` with the same defaults as the YAML file.
 - `pick_vpn_file` is an `<input type=file>`, `open_url` is `window.open`,
-  `daemon_install` / `daemon_restart` reject with the CLI command to run instead.
+  `daemon_install` / `daemon_restart` reject with the CLI command to run instead;
+  `tray_present` is false, `window_hide` rejects `no-tray`, `window_close` and
+  `config_reveal` only log (a tab has no tray and no file manager).
 
 Start the daemon first if it is not running (`bnm daemon status`). Query params:
 `?section=wifi` opens a section, `?motion=0` settles every animation (screenshots).
@@ -72,9 +74,18 @@ stays the source; nothing under `src/design/` or `src/theme/presets.ts` is edite
 Every read is a query keyed in `api/queries.ts`; every write is a function in
 `api/actions.ts` wrapped by `useAction`, which toasts the daemon's `error` and `hint` on
 failure. `app/events.ts` subscribes once at startup: `bnm://change` invalidates the queries
-for its `kind`, `bnm://event` feeds the events list and opens the password prompt on
-`secret-needed` (after `window_show`), `bnm://stream` drives the "daemon unreachable"
-banner, `bnm://config` re-applies the theme, `bnm://speed` drives the speed counter.
+for its `kind` (the map in `api/queries.ts` mirrors the TUI's), `bnm://event` feeds the
+events list and queues the password prompt on `secret-needed` (after `window_show`;
+several requests queue in arrival order and `secret-resolved` drops its request wherever
+it sits), `bnm://stream` drives the "daemon unreachable" banner, `bnm://config`
+re-applies the theme (idempotent: the shell sends each config twice) and re-asks
+`tray_present`, `bnm://speed` drives the speed counter while a run is in progress
+(late frames after a cancel are dropped; `cancelled` resets rather than errors).
+`startEventRouting` returns its unsubscribe synchronously and drops any listener that
+resolves after a stop, so StrictMode's double mount never leaves two handlers.
+
+The window is frameless, so the palette carries the close button: "Quit bnm"
+(`window_close`) always, "Hide to tray" (`window_hide`) when the shell reports a tray.
 
 ## Theme
 

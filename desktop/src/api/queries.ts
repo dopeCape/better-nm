@@ -22,13 +22,18 @@ export const qk = {
   secrets: ["secrets"] as const,
 };
 
-/** Which queries a `core.Change` kind invalidates. */
+/**
+ * Which queries a `core.Change` kind invalidates. Mirrors the TUI's loadsFor
+ * (internal/ui/tui/tui.go): an `active` hint also moves the Wi-Fi list's
+ * `active` flag and the devices' addresses; a `profiles` hint changes `known`
+ * on networks and the wired profile a device can toggle.
+ */
 export const CHANGE_TARGETS: Record<ChangeKind, readonly (readonly unknown[])[]> = {
   status: [qk.status],
   devices: [qk.devices, qk.status],
   wifi: [qk.wifi],
-  profiles: [qk.profiles, qk.wifi],
-  active: [qk.active, qk.status, qk.devices, qk.vpn],
+  profiles: [qk.profiles, qk.wifi, qk.devices],
+  active: [qk.active, qk.status, qk.devices, qk.wifi, qk.vpn],
   vpn: [qk.vpn],
   monitor: [qk.monitor, ["monitor", "samples"]],
 };

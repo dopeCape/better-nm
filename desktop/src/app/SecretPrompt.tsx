@@ -48,13 +48,16 @@ function useCountdown(expiresAt: string | undefined): number {
 
 export function SecretPrompt() {
   const req = useUI((s) => s.secret);
+  const queued = useUI((s) => s.secretQueue.length - 1);
   if (!req) return null;
-  // Keyed by request id so a new prompt starts with a clean form.
-  return <SecretPromptBody key={req.id} req={req} />;
+  // Keyed by request id so a new prompt starts with a clean form; the next
+  // queued request takes over when this one is answered, cancelled or resolved.
+  return <SecretPromptBody key={req.id} req={req} queued={Math.max(0, queued)} />;
 }
 
-function SecretPromptBody({ req }: { req: SecretRequest }) {
-  const setSecret = useUI((s) => s.setSecret);
+function SecretPromptBody({ req, queued }: { req: SecretRequest; queued: number }) {
+  const removeSecret = useUI((s) => s.removeSecret);
+  const done = () => removeSecret(req.id);
   const [values, setValues] = useState<Record<string, string>>({});
   const [show, setShow] = useState<Record<string, boolean>>({});
   const [save, setSave] = useState(true);
@@ -65,18 +68,18 @@ function SecretPromptBody({ req }: { req: SecretRequest }) {
 
   const answer = useAction(actions.secretAnswer, {
     silent: true,
-    onSuccess: () => setSecret(null),
+    onSuccess: done,
     onError: (e) => {
       if (e instanceof ApiError && (e.status === 404 || e.status === 409)) {
         ui.toast({ tone: "warn", title: "That prompt is gone", detail: e.hint ?? e.message });
-        setSecret(null);
+        done();
         return;
       }
       const d = describeError(e);
       setError(d.detail ? `${d.title}. ${d.detail}` : d.title);
     },
   });
-  const cancel = useAction(actions.secretCancel, { silent: true, onSuccess: () => setSecret(null), onError: () => setSecret(null) });
+  const cancel = useAction(actions.secretCancel, { silent: true, onSuccess: done, onError: done });
 
   const fields = req.fields;
 
@@ -160,6 +163,7 @@ function SecretPromptBody({ req }: { req: SecretRequest }) {
           ) : (
             "Expired"
           )}
+          {queued > 0 && <span className="muted">, {queued} more waiting</span>}
         </span>
         <span className="grow" />
         <button type="button" className="btn" onClick={() => void cancel.run(req.id)} disabled={cancel.pending}>

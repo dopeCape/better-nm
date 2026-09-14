@@ -164,7 +164,7 @@ export function createHttpShell(): Shell {
     async config_set(args) {
       const patch = (args.patch ?? {}) as DesktopConfigPatch;
       const cur = readConfig();
-      const next: DesktopConfig = { ...cur, ...patch, custom: patch.custom ? { ...patch.custom } : cur.custom };
+      const next: DesktopConfig = { ...cur, ...patch, custom: patch.custom ? { ...cur.custom, ...patch.custom } : cur.custom };
       writeConfig(next);
       queueMicrotask(() => em.emit("bnm://config", readConfig()));
     },
@@ -220,6 +220,22 @@ export function createHttpShell(): Shell {
 
     async window_show() {
       window.focus();
+    },
+
+    async window_hide() {
+      throw "no-tray";
+    },
+
+    async window_close() {
+      console.info("bnm: window_close (a browser tab stays open)");
+    },
+
+    async tray_present() {
+      return false;
+    },
+
+    async config_reveal() {
+      console.info(`bnm: config lives in localStorage["${STORAGE_KEY}"]`);
     },
 
     async notify(args) {

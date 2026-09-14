@@ -52,6 +52,8 @@ export function Wifi() {
 
   useHotkey("r", () => void rescan.run(), radioOn);
   useHotkey("/", () => filterRef.current?.focus());
+  // Esc closes the detail pane (overlays and inputs take Esc before it gets here).
+  useHotkey("Escape", () => setSelected(null), current !== null);
 
   // Rows fade in as the scan finds them: SSIDs not seen in a previous render
   // get the enter animation (the whole list on first load, staggered).
