@@ -16,7 +16,7 @@ invoke<ApiResponse>("api_request", { method: "GET" | "POST" | "PUT" | "DELETE", 
 ```
 - `path` is the full API path from `docs/API.md` including `/v1`, query string allowed.
 - Non-2xx is NOT an error at the invoke level: the frontend parses `{error, hint, code}` from `body`.
-- Transport failures (socket missing, daemon died) reject the promise with the string `"daemon-unreachable: <detail>"`.
+- Transport failures (socket missing, daemon died) reject the promise with the string `"daemon-unreachable: <detail>"`. A `method` outside GET/POST/PUT/DELETE or a `path` not under `/v1` rejects with a plain message (a frontend bug, not a daemon state).
 - The shell auto-starts `bnmd` on first use if the socket is absent (same rules as the Go client: `$XDG_RUNTIME_DIR/bnm/bnmd.sock`, fallback `/tmp/bnm-<uid>/bnmd.sock`; binary next to the app executable, then `bnmd` on PATH; logs to `$XDG_STATE_HOME/bnm/bnmd.log`), waits up to 3 s.
 - Version check: the shell reads `api_version` from `/v1/status` once and rejects with `"api-mismatch: daemon speaks v<n>, app needs v1"` if it differs.
 
@@ -30,9 +30,10 @@ invoke<ApiResponse>("api_request", { method: "GET" | "POST" | "PUT" | "DELETE", 
 | `bnm://stream` | `{connected: boolean, error?: string, attempt?: number}` on every connect/disconnect/retry |
 
 The shell reconnects with backoff 0.5 s → 10 s and keeps running until the app quits. `invoke("stream_stop")` exists for tests.
+The shell starts the reader itself at launch (the tray depends on it), so `stream_start` from the frontend is a no-op in practice; every reconnect attempt goes through the auto-start path, so a daemon that dies is respawned by the app. 45 s without any frame (the daemon pings every 15 s) counts as a disconnect.
 
 ### Speed test
-`invoke("speed_start", { opts })` where `opts` is `core.SpeedOptions`; the shell POSTs `/v1/speed` (SSE) and emits `bnm://speed` with payload `{phase: "progress", data: core.SpeedProgress} | {phase: "result", data: core.SpeedResult} | {phase: "error", error: string}`. `invoke("speed_cancel")` aborts it. One test at a time; a second start while running rejects with `"speed-running"`.
+`invoke("speed_start", { opts })` where `opts` is `core.SpeedOptions`; the shell POSTs `/v1/speed` (SSE) and emits `bnm://speed` with payload `{phase: "progress", data: core.SpeedProgress} | {phase: "result", data: core.SpeedResult} | {phase: "error", error: string}`. `invoke("speed_cancel")` aborts it and emits `{phase: "error", error: "cancelled"}`. One test at a time; a second start while running rejects with `"speed-running"`. A non-2xx answer to the POST (409 while the daemon runs another test) arrives as `{phase: "error", error: <error text from the body>}`.
 
 ## Desktop config (YAML)
 
@@ -81,6 +82,13 @@ Commands:
 - `invoke("config_set", { patch })` merges a partial config into the file and rewrites it (comments in the header preserved; user comments elsewhere may be lost, say so in the docs). The watcher then emits `bnm://config`.
 - `invoke<string>("config_path")`.
 
+Resolution rules the shell applies (so the frontend can use `custom` as the effective palette for every theme):
+- `custom` in the effective config always carries all sixteen tokens: the chosen preset's values, or for `theme: custom` the `dark` preset overlaid by the Base16 file, then the pywal file, then the file's own `custom` keys, in that order. `base16`, `import` and the file's `custom` keys have no effect unless `theme: custom`.
+- `accent` (any theme) replaces `custom.accent` and re-derives `custom.selection` (accent at 15 % alpha); a `custom.accent` without a `custom.selection` does the same.
+- Relative `base16`/`import` paths resolve against the config directory; `~/` expands. An unreadable or malformed file adds an entry to `errors` and leaves the previous layer in place.
+- Unknown keys, values outside the allowed sets, and non-`#rrggbb[aa]` colours each add one entry to `errors`; the key keeps its default. `config_set` rejects (and does not write) a patch that would introduce a new error; `null` in a patch removes the key. The shell emits `bnm://config` itself right after a successful `config_set`, and the watcher emits again when inotify reports the rewrite: expect two identical events.
+- `tray` changes apply live: the tray is built or removed on the next `bnm://config`.
+
 The TypeScript type `DesktopConfig` in `desktop/src/config/types.ts` is the source of truth for the frontend; the Rust `struct DesktopConfig` in `desktop/src-tauri/src/config.rs` must serialise to the same JSON (snake_case keys as above).
 
 ## Other shell services
@@ -89,9 +97,9 @@ The TypeScript type `DesktopConfig` in `desktop/src/config/types.ts` is the sour
 - `invoke("open_url", { url })`: opens in the default browser (Tailscale login).
 - `invoke<DaemonStatus>("daemon_status")` → `{running: boolean, socket: string, pid?: number, version?: string, unit_installed: boolean, unit_active: boolean}`.
 - `invoke("daemon_install")`: same steps as `bnm daemon install` (writes the user unit, `systemctl --user daemon-reload`, `enable --now`); rejects with the systemctl error text.
-- `invoke("daemon_restart")`.
+- `invoke("daemon_restart")`: `systemctl --user stop`/`start` when the unit is active on the default socket, else SIGTERM to the pid in `bnmd.pid` beside the socket and a fresh detached spawn; waits for the socket and re-runs the version check. The stream reconnects by itself (`bnm://stream` false, then true).
 - `invoke("window_show")`: shows and focuses the main window (secret prompts call this).
-- `invoke("notify", { title, body })`: only for the frontend's own toasts if ever needed; daemon notifications stay in the daemon.
+- `invoke("notify", { title, body? })`: only for the frontend's own toasts if ever needed; daemon notifications stay in the daemon.
 
 ## Tray
 

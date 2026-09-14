@@ -1,0 +1,18 @@
+{
+  "name": "bnm-desktop",
+  "private": true,
+  "version": "0.1.0",
+  "description": "bnm desktop: Tauri 2 shell (src-tauri) + React frontend (src)",
+  "scripts": {
+    "tauri": "tauri",
+    "tauri:dev": "tauri dev",
+    "tauri:build": "tauri build",
+    "tauri:build:bin": "tauri build --no-bundle",
+    "tauri:icon": "tauri icon ../packaging/desktop/bnm.png -o src-tauri/icons",
+    "tauri:test": "cargo test --manifest-path src-tauri/Cargo.toml",
+    "tauri:lint": "cargo fmt --manifest-path src-tauri/Cargo.toml --check && cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.11.0"
+  }
+}
