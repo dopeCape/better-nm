@@ -133,9 +133,14 @@ func run(args []string, stdout, stderr *os.File) int {
 // fakeOptions builds the in-memory world served by --fake.
 func fakeOptions() daemon.Options {
 	nm := fake.NewNM()
+	secrets := fake.NewSecretBroker()
+	nm.UseSecrets(secrets)
+	ovpn := fake.NewNMVPN()
+	ovpn.Secrets = secrets
 	return daemon.Options{
 		NM:        nm,
-		VPN:       fake.NewVPNRegistry(fake.NewTailscale(), fake.NewWireGuard(), fake.NewNMVPN()),
+		Secrets:   secrets,
+		VPN:       fake.NewVPNRegistry(fake.NewTailscale(), fake.NewWireGuard(), ovpn),
 		Monitor:   fake.NewMonitor(),
 		Store:     fake.NewStore(),
 		Speed:     &fake.SpeedTester{Delay: 300 * time.Millisecond}, // so progress is visible
@@ -177,8 +182,15 @@ func realOptions(ctx context.Context, cfg config.Config, logger *slog.Logger) (d
 
 	nt := &policyNotifier{Notifier: notify.New(policyFromConfig(cfg.Notify), logger)}
 
+	if nmClient.AgentRegistered() {
+		logger.Info("secret agent ready: NetworkManager will prompt through bnm", "identifier", nm.AgentIdentifier)
+	} else {
+		logger.Warn("secret agent not registered: activations needing a password the profile does not store will fail")
+	}
+
 	return daemon.Options{
 		NM:      nmClient,
+		Secrets: nmClient,
 		Store:   st,
 		VPN:     reg,
 		Monitor: monitorRunner{mon},
@@ -211,6 +223,7 @@ func policyFromConfig(n config.Notify) notify.Policy {
 		core.EventVPNDown:          n.VPNDown,
 		core.EventDegraded:         n.Degraded,
 		core.EventRecovered:        n.Recovered,
+		core.EventSecretNeeded:     n.SecretNeeded,
 	}
 	p.MutedNetworks = append([]string(nil), n.MutedNetworks...)
 	return p

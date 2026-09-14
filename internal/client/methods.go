@@ -396,6 +396,31 @@ func (c *Client) Infra(ctx context.Context) ([]core.InfraNetwork, error) {
 	return out, err
 }
 
+// PendingSecrets is GET /secrets: NetworkManager's open password prompts.
+func (c *Client) PendingSecrets(ctx context.Context) ([]core.SecretRequest, error) {
+	var out []core.SecretRequest
+	err := c.do(ctx, http.MethodGet, "/secrets", nil, nil, &out)
+	return out, err
+}
+
+// Secret is GET /secrets/{id}.
+func (c *Client) Secret(ctx context.Context, id string) (core.SecretRequest, error) {
+	var out core.SecretRequest
+	err := c.do(ctx, http.MethodGet, "/secrets/"+url.PathEscape(id), nil, nil, &out)
+	return out, err
+}
+
+// AnswerSecret is POST /secrets/{id}: 404 when the request is gone, 409 when
+// it was already answered or cancelled.
+func (c *Client) AnswerSecret(ctx context.Context, id string, a core.SecretAnswer) error {
+	return c.do(ctx, http.MethodPost, "/secrets/"+url.PathEscape(id), nil, a, nil)
+}
+
+// CancelSecret is POST /secrets/{id}/cancel.
+func (c *Client) CancelSecret(ctx context.Context, id string) error {
+	return c.do(ctx, http.MethodPost, "/secrets/"+url.PathEscape(id)+"/cancel", nil, nil, nil)
+}
+
 // Config is GET /config.
 func (c *Client) Config(ctx context.Context) (config.Config, error) {
 	var out config.Config

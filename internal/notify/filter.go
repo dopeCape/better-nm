@@ -77,7 +77,14 @@ func (f *Filter) Allow(e core.Event) bool {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	if !f.policy.IsEnabled(e.Type) || f.policy.IsMuted(e.NetworkKey) {
+	if !f.policy.IsEnabled(e.Type) {
+		return false
+	}
+	if e.Type == core.EventSecretNeeded {
+		// A prompt, not a status notice: never held, coalesced or muted.
+		return true
+	}
+	if f.policy.IsMuted(e.NetworkKey) {
 		return false
 	}
 	now := f.clock.Now()

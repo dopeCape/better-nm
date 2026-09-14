@@ -45,15 +45,19 @@ type Monitor struct {
 // Notify is the notification policy: which event types are delivered, and
 // which Network Keys are muted.
 type Notify struct {
-	Connected        bool     `toml:"connected" json:"connected"`
-	Disconnected     bool     `toml:"disconnected" json:"disconnected"`
-	NoInternet       bool     `toml:"no_internet" json:"no_internet"`
-	InternetRestored bool     `toml:"internet_restored" json:"internet_restored"`
-	VPNUp            bool     `toml:"vpn_up" json:"vpn_up"`
-	VPNDown          bool     `toml:"vpn_down" json:"vpn_down"`
-	Degraded         bool     `toml:"degraded" json:"degraded"`
-	Recovered        bool     `toml:"recovered" json:"recovered"`
-	MutedNetworks    []string `toml:"muted_networks" json:"muted_networks"`
+	Connected        bool `toml:"connected" json:"connected"`
+	Disconnected     bool `toml:"disconnected" json:"disconnected"`
+	NoInternet       bool `toml:"no_internet" json:"no_internet"`
+	InternetRestored bool `toml:"internet_restored" json:"internet_restored"`
+	VPNUp            bool `toml:"vpn_up" json:"vpn_up"`
+	VPNDown          bool `toml:"vpn_down" json:"vpn_down"`
+	Degraded         bool `toml:"degraded" json:"degraded"`
+	Recovered        bool `toml:"recovered" json:"recovered"`
+	// SecretNeeded notifies when NetworkManager waits for a password through
+	// bnm's secret agent (on by default; the prompt is the only way to learn
+	// about it from another window).
+	SecretNeeded  bool     `toml:"secret_needed" json:"secret_needed"`
+	MutedNetworks []string `toml:"muted_networks" json:"muted_networks"`
 }
 
 // Speed selects the default speed-test provider.
@@ -90,6 +94,7 @@ func Default() Config {
 			VPNDown:          true,
 			Degraded:         false,
 			Recovered:        false,
+			SecretNeeded:     true,
 			MutedNetworks:    []string{},
 		},
 		Speed: Speed{
@@ -258,6 +263,8 @@ func (n Notify) Enabled(t core.EventType) bool {
 		return n.Degraded
 	case core.EventRecovered:
 		return n.Recovered
+	case core.EventSecretNeeded:
+		return n.SecretNeeded
 	}
 	return false
 }

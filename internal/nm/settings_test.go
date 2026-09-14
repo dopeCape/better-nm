@@ -249,7 +249,7 @@ func mustV6(s string) []byte {
 }
 
 func TestWifiPartialSettings(t *testing.T) {
-	s, err := wifiPartialSettings("Cafe", false, core.SecWPAPSK, "hunter22", "baby")
+	s, err := wifiPartialSettings("Cafe", false, core.SecWPAPSK, "hunter22", "baby", false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -274,7 +274,7 @@ func TestWifiPartialSettings(t *testing.T) {
 		t.Fatalf("security=%v", sec)
 	}
 
-	s, err = wifiPartialSettings("Hidden", true, core.SecSAE, "pw", "")
+	s, err = wifiPartialSettings("Hidden", true, core.SecSAE, "pw", "", false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -285,7 +285,7 @@ func TestWifiPartialSettings(t *testing.T) {
 		t.Fatal("no permissions without a user name")
 	}
 
-	s, err = wifiPartialSettings("Open", false, core.SecOpen, "", "baby")
+	s, err = wifiPartialSettings("Open", false, core.SecOpen, "", "baby", false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -293,21 +293,40 @@ func TestWifiPartialSettings(t *testing.T) {
 		t.Fatal("open network must have no security section")
 	}
 
-	s, err = wifiPartialSettings("Owe", false, core.SecOWE, "", "baby")
+	s, err = wifiPartialSettings("Owe", false, core.SecOWE, "", "baby", false)
 	if err != nil || s["802-11-wireless-security"]["key-mgmt"].Value() != "owe" {
 		t.Fatalf("owe: %v %v", s, err)
 	}
 
-	s, err = wifiPartialSettings("Wep", false, core.SecWEP, "abcde", "baby")
+	s, err = wifiPartialSettings("Wep", false, core.SecWEP, "abcde", "baby", false)
 	if err != nil || s["802-11-wireless-security"]["key-mgmt"].Value() != "none" || s["802-11-wireless-security"]["wep-key-type"].Value() != uint32(1) {
 		t.Fatalf("wep: %v %v", s, err)
 	}
 
-	if _, err := wifiPartialSettings("Corp", false, core.SecWPAEAP, "", "baby"); !errors.Is(err, ErrUnsupported) {
+	if _, err := wifiPartialSettings("Corp", false, core.SecWPAEAP, "", "baby", false); !errors.Is(err, ErrUnsupported) {
 		t.Fatalf("eap must be ErrUnsupported, got %v", err)
 	}
-	if _, err := wifiPartialSettings("Cafe", false, core.SecWPAPSK, "", "baby"); !errors.Is(err, ErrNoSecrets) {
+	if _, err := wifiPartialSettings("Cafe", false, core.SecWPAPSK, "", "baby", false); !errors.Is(err, ErrNoSecrets) {
 		t.Fatalf("psk without password must be ErrNoSecrets, got %v", err)
+	}
+	// With the agent registered the secret is left out but stays system-owned,
+	// so NM asks for it and stores the answer.
+	s, err = wifiPartialSettings("Cafe", false, core.SecWPAPSK, "", "baby", true)
+	if err != nil {
+		t.Fatalf("prompt: %v", err)
+	}
+	if _, has := s["802-11-wireless-security"]["psk"]; has {
+		t.Fatalf("prompt must not set a psk: %v", s)
+	}
+	if s["802-11-wireless-security"]["psk-flags"].Value() != uint32(0) || s["802-11-wireless-security"]["key-mgmt"].Value() != "wpa-psk" {
+		t.Fatalf("prompt security dict: %v", s["802-11-wireless-security"])
+	}
+	s, err = wifiPartialSettings("Wep", false, core.SecWEP, "", "baby", true)
+	if err != nil || s["802-11-wireless-security"]["wep-key-flags"].Value() != uint32(0) {
+		t.Fatalf("wep prompt: %v %v", s, err)
+	}
+	if _, has := s["802-11-wireless-security"]["wep-key0"]; has {
+		t.Fatalf("wep prompt must not set a key: %v", s)
 	}
 }
 

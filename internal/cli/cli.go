@@ -103,6 +103,15 @@ type app struct {
 	ui       *ui
 	c        *client.Client
 	usageCmd *cobra.Command
+	stdin    *lineReader
+}
+
+// lines is the prompt reader over stdin (one buffer for the whole run).
+func (a *app) lines() *lineReader {
+	if a.stdin == nil {
+		a.stdin = newLineReader(a.in)
+	}
+	return a.stdin
 }
 
 func newApp(in io.Reader, out, errw io.Writer) *app {
@@ -255,6 +264,7 @@ unreachable, 4 permission denied.`,
 		a.eventsCmd(),
 		a.diagCmd(),
 		a.configCmd(),
+		a.secretsCmd(),
 		a.notifyCmd(),
 		a.daemonCmd(),
 		a.versionCmd(),

@@ -160,6 +160,8 @@ func iconFor(t core.EventType) string {
 		return "network-vpn"
 	case core.EventNoInternet, core.EventDegraded:
 		return "dialog-warning"
+	case core.EventSecretNeeded:
+		return "dialog-password"
 	default:
 		return "network-wireless"
 	}

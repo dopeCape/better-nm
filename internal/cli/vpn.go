@@ -106,14 +106,17 @@ func vpnDetail(v core.VPN) string {
 }
 
 func (a *app) vpnUpCmd() *cobra.Command {
-	return &cobra.Command{
+	var password string
+	cmd := &cobra.Command{
 		Use:   "up <name|id>",
-		Short: "Connect a VPN",
+		Short: "Connect a VPN (prompts for a password the profile does not store)",
 		Args:  a.exactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return a.vpnSwitch(cmd.Context(), args[0], true)
+			return a.vpnSwitch(cmd.Context(), args[0], true, password)
 		},
 	}
+	cmd.Flags().StringVar(&password, "password", "", "answer the VPN password prompt with this once (prefer the prompt; it stays out of the shell history)")
+	return cmd
 }
 
 func (a *app) vpnDownCmd() *cobra.Command {
@@ -122,7 +125,7 @@ func (a *app) vpnDownCmd() *cobra.Command {
 		Short: "Disconnect a VPN",
 		Args:  a.exactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return a.vpnSwitch(cmd.Context(), args[0], false)
+			return a.vpnSwitch(cmd.Context(), args[0], false, "")
 		},
 	}
 }
@@ -138,20 +141,29 @@ func (a *app) vpnToggleCmd() *cobra.Command {
 				return err
 			}
 			up := !(v.State == core.VPNConnected || v.State == core.VPNConnecting)
-			return a.vpnSwitch(cmd.Context(), v.ID, up)
+			return a.vpnSwitch(cmd.Context(), v.ID, up, "")
 		},
 	}
 }
 
-// vpnSwitch connects or disconnects, then waits (bounded) for the state to settle.
-func (a *app) vpnSwitch(ctx context.Context, arg string, up bool) error {
+// vpnSwitch connects or disconnects, then waits (bounded) for the state to
+// settle. Connecting follows the event stream and answers the password
+// prompts NetworkManager raises for this VPN (password preset from the flag,
+// used once; then the terminal).
+func (a *app) vpnSwitch(ctx context.Context, arg string, up bool, password string) error {
 	v, err := a.resolveVPN(ctx, arg)
 	if err != nil {
 		return err
 	}
 	c, _ := a.client()
 	if up {
-		err = c.ConnectVPN(ctx, v.ID)
+		opts := promptOpts{
+			match: func(r core.SecretRequest) bool {
+				return r.ConnectionUUID == v.ID || (r.VPN && r.ConnectionName == v.Name)
+			},
+			preset: map[string]string{"password": password},
+		}
+		err = a.runWithPrompts(ctx, c, opts, func(ctx context.Context) error { return c.ConnectVPN(ctx, v.ID) })
 	} else {
 		err = c.DisconnectVPN(ctx, v.ID)
 	}

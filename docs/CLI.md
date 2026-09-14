@@ -41,14 +41,14 @@ bnm tui                      terminal UI
 bnm status                   one-screen summary
 bnm devices                  network interfaces (physical, then virtual with their owner)
 bnm wifi list [--rescan] [--device D]
-bnm wifi connect <ssid> [--password P | --ask] [--hidden] [--device D]
+bnm wifi connect <ssid> [--password P | --ask] [--hidden] [--device D]   (answers NM's password prompts on the terminal)
 bnm wifi disconnect [--device D]
 bnm wifi forget <ssid|uuid>
 bnm wifi on | off
 bnm wifi saved
 bnm wired list | up [profile] [--device D] | down [--device D]
 bnm profile list [--type T] | show <name|uuid> | ip <name|uuid> ... | autoconnect <name|uuid> on|off | delete <name|uuid>
-bnm vpn list | up <name|id> | down <name|id> | toggle <name|id>
+bnm vpn list | up <name|id> [--password P] | down <name|id> | toggle <name|id>
 bnm vpn add wg <file.conf> [--name N] | add ovpn <file.ovpn> [--name N]
 bnm vpn ts status | peers [--all] | exit-node [list | set <peer> [--allow-lan] | off | on] | login | logout | dns on|off
 bnm monitor [status] | history [--anchor A] [--key K] [--limit N] | baseline [--reset] [--key K] | pause | resume
@@ -57,6 +57,7 @@ bnm speed history [--key K] [--limit N]
 bnm events [--limit N] | events --follow [--changes] [--limit N]
 bnm diag devices [--device D] [--no-sweep] | ports | routes [--all] | dns <name> [--server S] [--type T] | public-ip | infra
 bnm config | get <key> | set <key> <value> | mute <network-key> | unmute <network-key> | keys | path
+bnm secrets [list] | answer [id] [--save | --no-save] | cancel <id>
 bnm notify test
 bnm daemon status | start | stop | restart | install [--user-unit] | uninstall | logs [-f] [-n N]
 bnm version
@@ -90,7 +91,7 @@ verdict with the current round-trip per anchor, and the daemon build, uptime and
 | Command | What it does |
 |---|---|
 | `list [--rescan] [--device D]` | SSIDs in range sorted active first, then by signal: marker, SSID, `▂▄▆█` bars and %, band/channel, security (`open`, `OWE`, `WEP`, `WPA2`, `WPA3`, `802.1X`), `connected`/`saved`. `--rescan` requests a scan and waits (up to 6 s) for the results. |
-| `connect <ssid> [--password P \| --ask] [--hidden] [--device D]` | Joins the network; NM creates the profile when there is none. A secured, unknown network prompts for the password on a terminal (`--ask` forces the prompt; it never echoes); without a terminal it is an error with the hint to pass `--password` or `--ask`. An SSID that is not in range (after one rescan) and has no saved profile is refused unless `--hidden` is given, because NM would otherwise create and keep a profile for it. |
+| `connect <ssid> [--password P \| --ask] [--hidden] [--device D]` | Joins the network; NM creates the profile when there is none. A secured, unknown network prompts for the password on a terminal (`--ask` forces the prompt; it never echoes); without a terminal it is an error with the hint to pass `--password` or `--ask`. While the activation runs the command follows the event stream: when NetworkManager rejects the password (given by flag, typed, or stored in the profile) it asks bnmd's secret agent again and the command prints `Wrong password for <ssid>; try again.` and prompts once more (an empty answer gives up; the activation then fails and a brand-new profile is deleted). Without a terminal a rejected `--password` fails at once with exit 1; any other prompt is left open with the hint `run: bnm secrets answer <id>` so it can be answered from another shell. An SSID that is not in range (after one rescan) and has no saved profile is refused unless `--hidden` is given, because NM would otherwise create and keep a profile for it. |
 | `disconnect [--device D]` | Brings the Wi-Fi device down. |
 | `forget <ssid\|uuid>` | Deletes the saved Wi-Fi profile. |
 | `on` / `off` | Toggles the Wi-Fi radio. |
@@ -131,7 +132,11 @@ the backend attached):
 ```
 
 `up`, `down` and `toggle` act on one VPN and wait (up to 20 s) for it to leave `connecting`, then
-print the final state; a login URL is printed when the backend needs one. `add wg <file.conf>`
+print the final state; a login URL is printed when the backend needs one. `up` also follows the
+event stream and answers NetworkManager's password prompts for that VPN on the terminal (an
+unsaved password, a one-time code with the plugin's message, a rejected password asked again);
+`--password P` answers the first password prompt without asking. Without a terminal the prompt is
+left open and the command fails with the hint `run: bnm secrets answer <id>`. `add wg <file.conf>`
 imports a wg-quick file as an NM WireGuard profile and `add ovpn <file.ovpn>` an OpenVPN file through
 the NM plugin; the file is read locally and sent inline, so relative paths work. `--name` overrides
 the profile name (default: the file name without its extension).
@@ -193,6 +198,27 @@ at once; lists are comma separated, durations use Go syntax such as `30s`). `mut
 `unmute <network-key>` edit `notify.muted_networks`; a bare SSID of a saved network is accepted for
 `wifi:<ssid>`. `keys` lists every key with its default, `path` the file path.
 
+### `bnm secrets`
+
+bnmd is NetworkManager's secret agent for the session: when an activation needs a secret the
+profile does not store (a wrong Wi-Fi password being retried, an OTP / challenge-response, a VPN
+password saved as agent-owned or not-saved) NetworkManager asks bnmd, which raises a
+`secret-needed` event, shows a desktop notification (`notify.secret_needed`, on by default) whose
+body ends in `run: bnm secrets`, and keeps the prompt open for two minutes while the activation
+waits. `wifi connect` and `vpn up` answer their own prompts inline; anything else is answered here.
+
+| Command | What it does |
+|---|---|
+| `secrets` / `secrets list` | Open prompts: id, what it is for, kind (Wi-Fi, OpenVPN, ...), the fields asked for, a note (`previous answer rejected`, the VPN plugin's message, `expires in 1m50s`). `--json` prints the `core.SecretRequest`s. |
+| `answer [id] [--save \| --no-save]` | Asks for each field on the terminal (secrets are not echoed; a username is), then hands the answer to NetworkManager. With no id the only open prompt is taken; an id prefix of three or more characters is enough. An empty secret cancels the prompt. `--save` (default) stores the answer in the profile so the next activation does not ask; `--no-save` uses it once. |
+| `cancel <id>` | Gives up on a prompt; the activation fails with `no secrets available`. |
+
+```
+ID                FOR            KIND   ASKS            NOTE
+3f9c2a17e4b1d0aa  TP-Link_AB06   Wi-Fi  Wi-Fi password  previous answer rejected · expires in 1m48s
+answer with: bnm secrets answer <id>
+```
+
 ### `bnm notify test`
 
 Sends a test desktop notification through the daemon.
@@ -225,7 +251,9 @@ built in.
 `go test -race ./internal/cli/...` runs every command in-process against `internal/api` +
 `internal/daemon` over a temp Unix socket with `internal/fake` behind it, asserting on the rendered
 text and on the decoded `--json` output: status, Wi-Fi list/connect (including the wrong-password
-hint and the polkit exit code), VPN list/up/down/toggle/add and the Tailscale commands, monitor,
+hint, the polkit exit code and the secret-agent retry prompt driven by the fake broker), `secrets`
+list/answer/cancel, VPN list/up/down/toggle/add (including the inline and headless password
+prompts) and the Tailscale commands, monitor,
 speed with progress, event history and `--follow` (bounded by `--limit` and by cancellation), diag,
 config get/set/mute, name resolution and its ambiguity error, exit codes and usage errors, colour
 under `NO_COLOR` / `CLICOLOR_FORCE` / `--no-color`, and the daemon subcommands that do not need

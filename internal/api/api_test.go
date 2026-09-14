@@ -702,3 +702,109 @@ func TestNotRunningWithoutAutoStart(t *testing.T) {
 		t.Fatalf("want ErrNotRunning, got %v", err)
 	}
 }
+
+func TestSecretsRoutes(t *testing.T) {
+	broker := fake.NewSecretBroker()
+	r := newRigWith(t, func(o *daemon.Options) { o.Secrets = broker })
+	ctx := ctxT(t)
+
+	// Empty list is [] and a missing id is 404.
+	body, code, err := r.c.Raw(ctx, http.MethodGet, "/secrets", nil)
+	if err != nil || code != 200 || strings.TrimSpace(string(body)) != "[]" {
+		t.Fatalf("GET /secrets = %d %s %v", code, body, err)
+	}
+	if _, err := r.c.Secret(ctx, "nope"); !errors.Is(err, core.ErrNotFound) {
+		t.Fatalf("missing secret = %v", err)
+	}
+	if err := r.c.AnswerSecret(ctx, "nope", core.SecretAnswer{Secrets: map[string]string{"psk": "x"}}); !errors.Is(err, core.ErrNotFound) {
+		t.Fatalf("answer missing = %v", err)
+	}
+	if err := r.c.CancelSecret(ctx, "nope"); !errors.Is(err, core.ErrNotFound) {
+		t.Fatalf("cancel missing = %v", err)
+	}
+
+	// Raise one, see it on the stream, list and fetch it, answer it.
+	stream, err := r.c.Events(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	answers := broker.Raise(core.SecretRequest{
+		ConnectionUUID: "u1", ConnectionName: "Cafe", SSID: "Cafe", SettingName: "802-11-wireless-security",
+		Fields: []core.SecretField{{Key: "psk", Label: "Wi-Fi password", Secret: true}},
+	})
+	var id string
+	deadline := time.After(3 * time.Second)
+	for id == "" {
+		select {
+		case it, ok := <-stream:
+			if !ok {
+				t.Fatal("stream closed")
+			}
+			if it.Event != nil && it.Event.Type == core.EventSecretNeeded {
+				id = it.Event.Data["request_id"]
+			}
+		case <-deadline:
+			t.Fatal("no secret-needed on the stream")
+		}
+	}
+	pending, err := r.c.PendingSecrets(ctx)
+	if err != nil || len(pending) != 1 || pending[0].ID != id || pending[0].Fields[0].Key != "psk" {
+		t.Fatalf("pending = %+v %v", pending, err)
+	}
+	req, err := r.c.Secret(ctx, id)
+	if err != nil || req.SSID != "Cafe" || req.ExpiresAt.IsZero() {
+		t.Fatalf("secret = %+v %v", req, err)
+	}
+	// Unknown body fields and empty answers are 400.
+	if _, code, _ := r.c.Raw(ctx, http.MethodPost, "/secrets/"+id, map[string]any{"secrets": map[string]string{"psk": "x"}, "bogus": true}); code != 400 {
+		t.Fatalf("unknown field = %d", code)
+	}
+	if err := r.c.AnswerSecret(ctx, id, core.SecretAnswer{}); !errors.Is(err, core.ErrInvalid) {
+		t.Fatalf("empty answer = %v", err)
+	}
+	if err := r.c.AnswerSecret(ctx, id, core.SecretAnswer{Secrets: map[string]string{"psk": "hunter22"}, Save: true}); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case a := <-answers:
+		if a.Secrets["psk"] != "hunter22" || !a.Save {
+			t.Fatalf("answer = %+v", a)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("answer never arrived")
+	}
+	// Already answered is 409 for both answer and cancel.
+	var apiErr *client.APIError
+	err = r.c.AnswerSecret(ctx, id, core.SecretAnswer{Secrets: map[string]string{"psk": "again"}})
+	if !errors.As(err, &apiErr) || apiErr.Status != 409 {
+		t.Fatalf("second answer = %v", err)
+	}
+	if err := r.c.CancelSecret(ctx, id); !errors.As(err, &apiErr) || apiErr.Status != 409 {
+		t.Fatalf("cancel answered = %v", err)
+	}
+	if _, err := r.c.Secret(ctx, id); !errors.Is(err, core.ErrNotFound) {
+		t.Fatalf("answered request must leave the pending list: %v", err)
+	}
+
+	// Cancel route.
+	answers = broker.Raise(core.SecretRequest{ConnectionUUID: "u2", ConnectionName: "vpn", VPN: true, SettingName: "vpn"})
+	pending, _ = r.c.PendingSecrets(ctx)
+	if len(pending) != 1 {
+		t.Fatalf("pending = %+v", pending)
+	}
+	if err := r.c.CancelSecret(ctx, pending[0].ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := <-answers; ok {
+		t.Fatal("cancel must close the channel")
+	}
+	if o, done := broker.Outcome(pending[0].ID); !done || o != core.SecretCancelled {
+		t.Fatalf("outcome = %v %v", o, done)
+	}
+
+	// No broker: 501.
+	r2 := newRig(t)
+	if _, err := r2.c.PendingSecrets(ctx); !errors.Is(err, core.ErrUnsupported) {
+		t.Fatalf("no broker = %v", err)
+	}
+}

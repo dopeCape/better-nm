@@ -33,8 +33,14 @@
 //   - go test -tags live -run Live: read-only against this machine's real
 //     NetworkManager.
 //
-// Out of scope for v1 (TODO): registering a SecretAgent (so NM could prompt
-// for secrets the profile does not store) and WPA-EAP networks.
+// The client is also NetworkManager's secret agent for the session (agent.go):
+// it exports org.freedesktop.NetworkManager.SecretAgent, registers with
+// AgentManager and turns GetSecrets calls into core.SecretRequests the daemon
+// publishes and the surfaces answer (core.SecretBroker). The agent is
+// unit-tested on a private dbus-daemon; dbusmock has no AgentManager, so
+// registration failing there is the "no agent" path.
+//
+// Out of scope for v1 (TODO): WPA-EAP networks.
 package nm
 
 import (
@@ -99,6 +105,12 @@ type Client struct {
 	permMu sync.Mutex
 	perms  map[string]string // cached GetPermissions; nil = fetch on next use
 
+	// agent is the NM secret agent (see agent.go); secretTimeout bounds a request.
+	agent         *agent
+	secretTimeout time.Duration
+	ownerMu       sync.Mutex
+	nmOwner       string // NM's unique bus name, for the GetSecrets sender check
+
 	// test seams
 	sysfs    sysfsProbe
 	username string
@@ -128,6 +140,7 @@ func New(ctx context.Context, opts ...Option) (*Client, error) {
 		nmcli:           "nmcli",
 		uptime:          readUptime,
 		activateTimeout: 45 * time.Second,
+		secretTimeout:   DefaultSecretTimeout,
 	}
 	for _, o := range opts {
 		o(c)
@@ -160,6 +173,10 @@ func New(ctx context.Context, opts ...Option) (*Client, error) {
 		c.teardown()
 		return nil, err
 	}
+	c.agent = newAgent(c.conn, c.ctx, c.log, c.secretTimeout)
+	c.agent.trusted = c.trustedSender
+	c.agent.persist = c.persistSecrets
+	c.registerAgent(ctx)
 	go c.loop()
 	return c, nil
 }
@@ -177,6 +194,12 @@ func (c *Client) teardown() {
 func (c *Client) Close() error {
 	c.cancel()
 	<-c.done
+	if c.agent != nil {
+		c.agent.cancelAll()
+		uctx, ucancel := context.WithTimeout(context.Background(), 2*time.Second)
+		c.agent.unregister(uctx)
+		ucancel()
+	}
 	c.conn.RemoveSignal(c.sigCh)
 	c.closeSubs()
 	if c.ownConn {
@@ -553,7 +576,12 @@ func (c *Client) handle(sig *dbus.Signal) {
 		if len(sig.Body) >= 3 {
 			newOwner, _ := sig.Body[2].(string)
 			c.invalidatePermissions()
+			c.setNMOwner(newOwner)
 			if newOwner == "" {
+				if c.agent != nil {
+					c.agent.cancelAll()
+					c.agent.markUnregistered()
+				}
 				c.log.Warn("nm: NetworkManager left the bus")
 				c.mu.Lock()
 				c.objs = map[dbus.ObjectPath]map[string]props{}
@@ -564,6 +592,8 @@ func (c *Client) handle(sig *dbus.Signal) {
 				if err := c.resync(ctx); err != nil {
 					c.log.Warn("nm: resync failed", "err", err)
 				}
+				// NM forgets its agents when it restarts.
+				c.registerAgent(ctx)
 			}
 			for _, k := range []core.ChangeKind{core.ChangeStatus, core.ChangeDevices, core.ChangeWifi, core.ChangeProfiles, core.ChangeActive} {
 				c.emit(k, pathNM)

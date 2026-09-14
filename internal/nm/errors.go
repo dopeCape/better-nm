@@ -24,8 +24,9 @@ var (
 	// ErrAuthFailed: the network rejected our credentials (wrong Wi-Fi password,
 	// VPN login refused).
 	ErrAuthFailed = core.Errorf(core.KindInvalid, "", "authentication failed")
-	// ErrNoSecrets: NM needed a secret nobody could supply (no secret agent
-	// registered; the profile marks the secret agent-owned or not-saved).
+	// ErrNoSecrets: NM needed a secret nobody supplied (the prompt was
+	// cancelled or nobody answered it, or no secret agent is registered and the
+	// profile does not store the secret).
 	ErrNoSecrets = core.Errorf(core.KindInvalid, "", "no secrets available")
 	// ErrUnsupported: the operation or profile kind is not supported (by this NM,
 	// by bnm v1, or by the mock in tests).
@@ -53,6 +54,10 @@ const polkitHint = "NetworkManager asked polkit and got no answer. Run a session
 	"authentication agent (polkit-gnome, polkit-kde-agent, lxpolkit, hyprpolkitagent, ...) " +
 	"so prompts can be shown, or ask an admin to grant the action in a polkit rule. " +
 	"Profiles bnm creates are scoped to your user and never prompt."
+
+// noSecretsHint is attached when an activation ended for want of a secret.
+const noSecretsHint = "the password prompt was cancelled or not answered in time; retry, or store the " +
+	"password in the profile (`bnm wifi connect <ssid> --ask`). Pending prompts: `bnm secrets`"
 
 // Error is the typed error every D-Bus failure is wrapped in.
 type Error struct {
@@ -155,7 +160,7 @@ func classify(name, msg string) (error, string) {
 		"SettingNotFound", "PropertyNotFound", "NotRegistered", "DoesNotExist":
 		return ErrNotFound, ""
 	case "NoSecrets", "UserCanceled", "AgentCanceled":
-		return ErrNoSecrets, "no secret agent is registered for this session (bnm v1 does not register one); store the secret in the profile instead"
+		return ErrNoSecrets, noSecretsHint
 	case "NotSupported", "MissingPlugin", "NotSoftware", "MissingDependencies":
 		return ErrUnsupported, ""
 	case "VersionIdMismatch":

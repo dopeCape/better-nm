@@ -2,8 +2,10 @@
 // route lives under /v1 and maps one-to-one onto a *daemon.Daemon method; the
 // wire types in types.go are shared with internal/client. Errors are JSON
 // {error, hint?, code} with the status derived from core.ErrorKind. Two routes
-// stream Server-Sent Events: GET /events/stream and POST /speed. Tested end to
-// end through internal/client against a daemon built on internal/fake.
+// stream Server-Sent Events: GET /events/stream and POST /speed. The /secrets
+// routes let a surface answer NetworkManager's password prompts (see
+// core.SecretBroker). Tested end to end through internal/client against a
+// daemon built on internal/fake.
 package api
 
 import (
@@ -138,6 +140,10 @@ func (s *Server) routes() {
 	m.HandleFunc(p("GET /diag/dns"), s.diagDNS)
 	m.HandleFunc(p("GET /diag/public-ip"), s.diagPublicIP)
 	m.HandleFunc(p("GET /diag/infra"), s.diagInfra)
+	m.HandleFunc(p("GET /secrets"), s.secrets)
+	m.HandleFunc(p("GET /secrets/{id}"), s.secret)
+	m.HandleFunc(p("POST /secrets/{id}"), s.secretAnswer)
+	m.HandleFunc(p("POST /secrets/{id}/cancel"), s.secretCancel)
 	m.HandleFunc(p("GET /config"), s.config)
 	m.HandleFunc(p("PUT /config"), s.configSet)
 	m.HandleFunc(p("POST /notify/test"), s.notifyTest)
@@ -758,6 +764,48 @@ func (s *Server) diagInfra(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, nonNil(nets))
+}
+
+// --- secrets ----------------------------------------------------------------------------------
+
+func (s *Server) secrets(w http.ResponseWriter, r *http.Request) {
+	reqs, err := s.d.PendingSecrets(r.Context())
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, nonNil(reqs))
+}
+
+func (s *Server) secret(w http.ResponseWriter, r *http.Request) {
+	req, err := s.d.Secret(r.Context(), r.PathValue("id"))
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	req.Fields = nonNil(req.Fields)
+	writeJSON(w, http.StatusOK, req)
+}
+
+func (s *Server) secretAnswer(w http.ResponseWriter, r *http.Request) {
+	var ans core.SecretAnswer
+	if err := decode(r, &ans); err != nil {
+		writeError(w, err)
+		return
+	}
+	if err := s.d.AnswerSecret(r.Context(), r.PathValue("id"), ans); err != nil {
+		writeError(w, err)
+		return
+	}
+	ok(w)
+}
+
+func (s *Server) secretCancel(w http.ResponseWriter, r *http.Request) {
+	if err := s.d.CancelSecret(r.Context(), r.PathValue("id")); err != nil {
+		writeError(w, err)
+		return
+	}
+	ok(w)
 }
 
 // --- config / notify ----------------------------------------------------------------------------

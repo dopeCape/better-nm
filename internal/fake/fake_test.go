@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -494,5 +495,126 @@ func TestNotifierMonitorSpeedDiag(t *testing.T) {
 	p, _ := n.Profile(ctx, uuid)
 	if p.Type != core.ProfileWireGuard || len(p.IPv4.Addresses) != 2 {
 		t.Errorf("imported wg: %+v", p)
+	}
+}
+
+func TestSecretBrokerAndPromptingNM(t *testing.T) {
+	ctx := context.Background()
+	b := NewSecretBroker()
+	b.Timeout = 200 * time.Millisecond
+	var mu sync.Mutex
+	var needed []core.SecretRequest
+	var resolved [][2]string
+	b.SetSecretHandler(func(r core.SecretRequest) { mu.Lock(); needed = append(needed, r); mu.Unlock() })
+	b.SetSecretResolvedHandler(func(id string, o core.SecretOutcome) {
+		mu.Lock()
+		resolved = append(resolved, [2]string{id, string(o)})
+		mu.Unlock()
+	})
+
+	// Raise fills in the id and times, publishes, and the answer flows back.
+	ch := b.Raise(core.SecretRequest{ConnectionName: "Cafe", SSID: "Cafe"})
+	mu.Lock()
+	if len(needed) != 1 || needed[0].ID == "" || needed[0].ExpiresAt.IsZero() || len(needed[0].Fields) != 1 {
+		t.Fatalf("needed = %+v", needed)
+	}
+	id := needed[0].ID
+	mu.Unlock()
+	if p, _ := b.Pending(ctx); len(p) != 1 || p[0].ID != id {
+		t.Fatalf("pending = %+v", p)
+	}
+	if err := b.Answer(ctx, id, core.SecretAnswer{Secrets: map[string]string{"nope": "x"}}); !errors.Is(err, core.ErrInvalid) {
+		t.Fatalf("answer without the requested key: %v", err)
+	}
+	if err := b.Answer(ctx, id, core.SecretAnswer{Secrets: map[string]string{"psk": "pw"}}); err != nil {
+		t.Fatal(err)
+	}
+	if a := <-ch; a.Secrets["psk"] != "pw" {
+		t.Fatalf("answer = %+v", a)
+	}
+	if err := b.Answer(ctx, id, core.SecretAnswer{Secrets: map[string]string{"psk": "pw"}}); !errors.Is(err, core.ErrConflict) {
+		t.Fatalf("second answer: %v", err)
+	}
+	if err := b.Cancel(ctx, "missing"); !errors.Is(err, core.ErrNotFound) {
+		t.Fatalf("cancel missing: %v", err)
+	}
+	// Expiry closes the channel and reports timeout.
+	ch = b.Raise(core.SecretRequest{ConnectionName: "Slow"})
+	if _, ok := <-ch; ok {
+		t.Fatal("expired request must close its channel")
+	}
+	mu.Lock()
+	last := resolved[len(resolved)-1]
+	mu.Unlock()
+	if last[1] != string(core.SecretTimeout) {
+		t.Fatalf("resolved = %v", resolved)
+	}
+
+	// A prompting NM asks for the password of a secured unknown network,
+	// asks again (RequestNew) after a too-short answer, and connects.
+	n := NewNM()
+	n.UseSecrets(b)
+	b.Timeout = 5 * time.Second
+	b.SetSecretHandler(func(r core.SecretRequest) {
+		go func() {
+			pw := "hunter22"
+			if !r.RequestNew {
+				pw = "short"
+			}
+			_ = b.Answer(ctx, r.ID, core.SecretAnswer{Secrets: map[string]string{"psk": pw}})
+		}()
+		mu.Lock()
+		needed = append(needed, r)
+		mu.Unlock()
+	})
+	if err := n.ConnectWifi(ctx, core.ConnectWifiRequest{SSID: NeighbourSSD}); err != nil {
+		t.Fatalf("prompted connect: %v", err)
+	}
+	mu.Lock()
+	rounds := needed[len(needed)-2:]
+	mu.Unlock()
+	if rounds[0].RequestNew || !rounds[1].RequestNew || rounds[1].SSID != NeighbourSSD {
+		t.Fatalf("rounds = %+v", rounds)
+	}
+	st, _ := n.Status(ctx)
+	if st.Primary == nil || st.Primary.ProfileName != NeighbourSSD {
+		t.Fatalf("not connected: %+v", st.Primary)
+	}
+	// A cancelled prompt fails the connect with a hint.
+	b.SetSecretHandler(func(r core.SecretRequest) { go func() { _ = b.Cancel(ctx, r.ID) }() })
+	n.RemoveAP(WifiDevice, NeighbourSSD)
+	n.AddAP(WifiDevice, core.WifiNetwork{SSID: "Other", Device: WifiDevice, Security: core.SecWPAPSK, Strength: 50})
+	err := n.ConnectWifi(ctx, core.ConnectWifiRequest{SSID: "Other"})
+	if !errors.Is(err, core.ErrInvalid) || core.HintOf(err) == "" {
+		t.Fatalf("cancelled prompt: %v", err)
+	}
+	// With a password given nothing is asked.
+	mu.Lock()
+	before := len(needed)
+	mu.Unlock()
+	if err := n.ConnectWifi(ctx, core.ConnectWifiRequest{SSID: "Other", Password: "longenough"}); err != nil {
+		t.Fatal(err)
+	}
+	mu.Lock()
+	if len(needed) != before {
+		t.Fatal("password given but prompted anyway")
+	}
+	mu.Unlock()
+
+	// The nm-vpn adapter prompts for the VPN password too.
+	ov := NewNMVPN()
+	ov.Secrets = b
+	b.SetSecretHandler(func(r core.SecretRequest) {
+		if !r.VPN || r.Fields[0].Key != "password" {
+			t.Errorf("vpn request = %+v", r)
+		}
+		go func() { _ = b.Answer(ctx, r.ID, core.SecretAnswer{Secrets: map[string]string{"password": "s3cret"}}) }()
+	})
+	vpns, _ := ov.List(ctx)
+	if err := ov.Connect(ctx, vpns[0].ID); err != nil {
+		t.Fatal(err)
+	}
+	if vpns, _ = ov.List(ctx); vpns[0].State != core.VPNConnected {
+		t.Fatalf("vpn state = %s", vpns[0].State)
 	}
 }

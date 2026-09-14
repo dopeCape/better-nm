@@ -483,8 +483,10 @@ func ssidString(b []byte) string {
 // ---- Settings builders ----
 
 // wifiPartialSettings is what AddAndActivateConnection2 gets for a new network;
-// NM fills in the rest from the device and access point.
-func wifiPartialSettings(ssid string, hidden bool, sec core.WifiSecurity, password, user string) (settingsDict, error) {
+// NM fills in the rest from the device and access point. With prompt set an
+// empty password is not an error: the secret is left out (flags 0, system
+// owned) so NM asks the secret agent for it and stores the answer.
+func wifiPartialSettings(ssid string, hidden bool, sec core.WifiSecurity, password, user string, prompt bool) (settingsDict, error) {
 	km := keyMgmtFor(sec)
 	s := settingsDict{
 		settingConnection: {
@@ -511,18 +513,22 @@ func wifiPartialSettings(ssid string, hidden bool, sec core.WifiSecurity, passwo
 	wsec := props{"key-mgmt": dbus.MakeVariant(km)}
 	switch sec {
 	case core.SecWPAPSK, core.SecSAE:
-		if password == "" {
+		if password == "" && !prompt {
 			return nil, newErr("connect wifi "+ssid, ErrNoSecrets, "this network needs a password")
 		}
-		wsec["psk"] = dbus.MakeVariant(password)
+		if password != "" {
+			wsec["psk"] = dbus.MakeVariant(password)
+		}
 		wsec["psk-flags"] = dbus.MakeVariant(secretFlagsNone)
 	case core.SecWEP:
-		if password == "" {
+		if password == "" && !prompt {
 			return nil, newErr("connect wifi "+ssid, ErrNoSecrets, "this network needs a WEP key")
 		}
-		wsec["wep-key0"] = dbus.MakeVariant(password)
+		if password != "" {
+			wsec["wep-key0"] = dbus.MakeVariant(password)
+			wsec["wep-key-type"] = dbus.MakeVariant(wepKeyType(password))
+		}
 		wsec["wep-key-flags"] = dbus.MakeVariant(secretFlagsNone)
-		wsec["wep-key-type"] = dbus.MakeVariant(wepKeyType(password))
 		wsec["auth-alg"] = dbus.MakeVariant("open")
 	}
 	s[settingWifi]["security"] = dbus.MakeVariant(settingWifiSecurity)

@@ -40,7 +40,7 @@ Lists are never `null`; an empty list is `[]`.
 |---|---|---|
 | `GET /v1/wifi?device=` | `device` optional (all Wi-Fi devices when empty) | `[]core.WifiNetwork` |
 | `POST /v1/wifi/scan` | `{device?}` | ok (returns when the scan is *requested*; results arrive as a `wifi` change) |
-| `POST /v1/wifi/connect` | `core.ConnectWifiRequest` `{ssid, device?, password?, hidden?, username?}` | ok |
+| `POST /v1/wifi/connect` | `core.ConnectWifiRequest` `{ssid, device?, password?, hidden?, username?}` | ok. Without `password` on a secured, unknown network the profile is created without the secret and NetworkManager asks for it through the [secret agent](#secrets-networkmanager-password-prompts); the call then blocks until the prompt is answered (or cancelled / expired, then 400) |
 | `POST /v1/wifi/disconnect` | `{device?}` (first Wi-Fi device when empty) | ok |
 | `POST /v1/wifi/forget` | `{uuid}` | ok |
 | `POST /v1/wifi/enabled` | `{on}` | ok |
@@ -123,9 +123,41 @@ daemon (see the notification policy in [issue #25](https://github.com/dopeCape/b
 | `internet-restored` | connectivity returns to `full` after a `no-internet` | `Internet restored` |
 | `vpn-up` / `vpn-down` | a VPN enters / leaves `connected` (per VPN `id`) | `<VPN> connected` / `<VPN> disconnected` |
 | `degraded` / `recovered` | forwarded from the monitor's baseline engine | as sent |
+| `secret-needed` | NetworkManager asked bnmd (its secret agent) for a secret the profile does not store; `data.request_id` names the `core.SecretRequest` to answer, `data.connection_uuid`, `data.connection_name`, `data.ssid` (Wi-Fi) and `data.vpn` (`"true"`) say what for | `Password needed for <name>` / `<field labels> for <network> (the previous one was rejected). <plugin message> run: bnm secrets` |
+| `secret-resolved` | that request ended; `data.request_id`, `data.outcome` = `answered` \| `cancelled` \| `timeout` | `Password prompt answered` / – |
 
 A slow stream consumer never blocks the daemon: it is buffered (128 items) and drops the newest
 item when full.
+
+## Secrets (NetworkManager password prompts)
+
+bnmd registers with NetworkManager as the session's secret agent
+(`org.freedesktop.NetworkManager.SecretAgent`, identifier `io.github.dopecape.bnm`). When an
+activation needs a secret the profile does not hold (a wrong Wi-Fi password being retried, an
+OTP / challenge-response, a VPN password saved as agent-owned or not-saved) NM calls the agent,
+the daemon emits `secret-needed` and keeps a `core.SecretRequest` open for two minutes; the
+activation call (`POST /wifi/connect`, `POST /profiles/{uuid}/activate`, `POST /vpn/{id}/connect`)
+keeps waiting while the prompt is open. A surface answers or cancels it here.
+
+| Route | Request | Response |
+|---|---|---|
+| `GET /v1/secrets` | – | `[]core.SecretRequest` still open, oldest first |
+| `GET /v1/secrets/{id}` | – | `core.SecretRequest` (404 once answered, cancelled or expired) |
+| `POST /v1/secrets/{id}` | `core.SecretAnswer` `{secrets: {<field key>: <value>}, save}` | ok; 404 when the request is gone, 409 when it was already answered or cancelled, 400 when no requested key is present |
+| `POST /v1/secrets/{id}/cancel` | – | ok (the activation then fails with `no secrets available`); 404 / 409 as above |
+
+`core.SecretRequest`: `{id, connection_uuid, connection_name, ssid?, vpn, vpn_kind?, setting_name,
+fields: [{key, label, secret}], message?, request_new, user_requested, created_at, expires_at}`.
+`fields` are the values NM asks for (`psk` "Wi-Fi password", `wep-key0`, `password`, `cert-pass`,
+`http-proxy-password`, `challenge-response` "One-time code / challenge response", `username`
+(not secret), ...), `message` is free text from the VPN plugin, `request_new` means the stored
+secret was tried and rejected (say "wrong password"). With `save` true the secret is stored in
+the profile as system-owned (`<key>-flags 0`) so the next activation does not ask: NM does that
+itself for secrets the profile already calls system-owned, and bnmd rewrites the profile for
+agent-owned / not-saved ones (imported `.ovpn` files default to agent-owned). All routes answer
+501 when the daemon has no secret agent (`bnmd --fake` has an in-memory one that prompts when a
+secured unknown network is joined without a password, or with the password `wrong`, and when
+the fake OpenVPN profile is connected).
 
 ## Diagnostics
 
@@ -142,7 +174,7 @@ item when full.
 
 | Route | Request | Response |
 |---|---|---|
-| `GET /v1/config` | – | the whole `config.Config` (sections `monitor`, `notify`, `speed`, `tailscale`, `daemon`) |
+| `GET /v1/config` | – | the whole `config.Config` (sections `monitor`, `notify`, `speed`, `tailscale`, `daemon`); `notify.secret_needed` (default on) is the desktop notification for password prompts, never debounced, rate-limited or muted |
 | `PUT /v1/config` | `{key, value}` with a dotted key such as `notify.degraded`; lists are comma separated, durations Go syntax (`30s`) | the new `config.Config` (persisted to `$XDG_CONFIG_HOME/bnm/config.toml`) |
 | `POST /v1/notify/test` | – | ok (sends a test desktop notification; not recorded in history) |
 

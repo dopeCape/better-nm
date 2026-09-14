@@ -28,6 +28,9 @@ func TestDefaults(t *testing.T) {
 	if c.Notify.Degraded || c.Notify.Recovered {
 		t.Errorf("degraded/recovered should default off")
 	}
+	if !c.Notify.SecretNeeded || !c.Notify.Enabled(core.EventSecretNeeded) {
+		t.Errorf("secret_needed should default on: %+v", c.Notify)
+	}
 }
 
 func TestPathUsesXDG(t *testing.T) {
@@ -183,7 +186,7 @@ func TestKeys(t *testing.T) {
 	keys := Keys()
 	want := []string{"daemon.log_level", "monitor.anchors", "monitor.interval", "monitor.retention_days",
 		"notify.connected", "notify.degraded", "notify.disconnected", "notify.internet_restored", "notify.muted_networks",
-		"notify.no_internet", "notify.recovered", "notify.vpn_down", "notify.vpn_up",
+		"notify.no_internet", "notify.recovered", "notify.secret_needed", "notify.vpn_down", "notify.vpn_up",
 		"speed.iperf3_server", "speed.max_bytes", "speed.provider", "tailscale.socket"}
 	if strings.Join(keys, " ") != strings.Join(want, " ") {
 		t.Errorf("Keys() = %v", keys)

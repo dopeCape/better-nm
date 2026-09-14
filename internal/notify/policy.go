@@ -32,7 +32,9 @@ type Policy struct {
 
 // DefaultPolicy is issue #25's table: connected, disconnected, no-internet,
 // internet-restored, vpn-up and vpn-down on; degraded and recovered off;
-// 5 s debounce; 30 s rate limit.
+// 5 s debounce; 30 s rate limit. secret-needed (NetworkManager waiting for a
+// password through bnm's agent) is on and bypasses debounce, rate limit and
+// mutes: every prompt must reach the user.
 func DefaultPolicy() Policy {
 	return Policy{
 		Enabled: map[core.EventType]bool{
@@ -44,6 +46,7 @@ func DefaultPolicy() Policy {
 			core.EventVPNDown:          true,
 			core.EventDegraded:         false,
 			core.EventRecovered:        false,
+			core.EventSecretNeeded:     true,
 		},
 		Debounce:  5 * time.Second,
 		RateLimit: 30 * time.Second,

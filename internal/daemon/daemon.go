@@ -128,6 +128,15 @@ type PolicyUpdater interface {
 	SetPolicy(config.Notify)
 }
 
+// SecretSource is implemented by a core.SecretBroker that originates requests
+// (the NM secret agent, the fake): the daemon installs the callbacks that turn
+// a new request into a secret-needed event and its resolution into
+// secret-resolved.
+type SecretSource interface {
+	SetSecretHandler(func(core.SecretRequest))
+	SetSecretResolvedHandler(func(id string, outcome core.SecretOutcome))
+}
+
 // Options wires the daemon. NM, Store and Config are required; the rest may be
 // nil and the matching routes answer 501.
 type Options struct {
@@ -139,7 +148,10 @@ type Options struct {
 	Notifier  core.Notifier
 	Diag      Diag
 	WireGuard WireGuardImporter
-	Config    config.Config
+	// Secrets answers NetworkManager's secret requests (the nm.Client is the
+	// broker); nil makes the /secrets routes answer 501.
+	Secrets core.SecretBroker
+	Config  config.Config
 	// ConfigPath is where PUT /config persists; "" = config.Path().
 	ConfigPath string
 	Logger     *slog.Logger
@@ -235,6 +247,10 @@ func New(o Options) (*Daemon, error) {
 		bus:      newBus(),
 		cfg:      o.Config,
 		wake:     make(chan struct{}, 1),
+	}
+	if src, ok := o.Secrets.(SecretSource); ok {
+		src.SetSecretHandler(d.onSecretNeeded)
+		src.SetSecretResolvedHandler(d.onSecretResolved)
 	}
 	return d, nil
 }
@@ -1139,6 +1155,156 @@ func (d *Daemon) SetConfig(key, value string) (config.Config, error) {
 	}
 	d.log.Info("config updated", "key", key, "value", value)
 	return next, nil
+}
+
+// --- secrets -----------------------------------------------------------------------------
+
+func (d *Daemon) secrets() (core.SecretBroker, error) {
+	if d.o.Secrets == nil {
+		return nil, core.Errorf(core.KindUnsupported, "", "daemon: no secret agent in this build")
+	}
+	return d.o.Secrets, nil
+}
+
+// PendingSecrets lists the open secret requests.
+func (d *Daemon) PendingSecrets(ctx context.Context) ([]core.SecretRequest, error) {
+	b, err := d.secrets()
+	if err != nil {
+		return nil, err
+	}
+	return b.Pending(ctx)
+}
+
+// Secret finds one open request by id.
+func (d *Daemon) Secret(ctx context.Context, id string) (core.SecretRequest, error) {
+	reqs, err := d.PendingSecrets(ctx)
+	if err != nil {
+		return core.SecretRequest{}, err
+	}
+	for _, r := range reqs {
+		if r.ID == id {
+			return r, nil
+		}
+	}
+	return core.SecretRequest{}, core.Errorf(core.KindNotFound, "run `bnm secrets`", "daemon: no pending secret request %s", id)
+}
+
+// AnswerSecret hands a surface's answer to the broker.
+func (d *Daemon) AnswerSecret(ctx context.Context, id string, a core.SecretAnswer) error {
+	b, err := d.secrets()
+	if err != nil {
+		return err
+	}
+	if id == "" {
+		return core.Errorf(core.KindInvalid, "", "daemon: request id is required")
+	}
+	if len(a.Secrets) == 0 {
+		return core.Errorf(core.KindInvalid, "", "daemon: answer has no secrets")
+	}
+	return b.Answer(ctx, id, a)
+}
+
+// CancelSecret cancels a pending request.
+func (d *Daemon) CancelSecret(ctx context.Context, id string) error {
+	b, err := d.secrets()
+	if err != nil {
+		return err
+	}
+	if id == "" {
+		return core.Errorf(core.KindInvalid, "", "daemon: request id is required")
+	}
+	return b.Cancel(ctx, id)
+}
+
+// onSecretNeeded is the broker's callback for a new request: it becomes a
+// secret-needed event (stored, streamed and notified) whose Data names the
+// request so a surface can fetch and answer it.
+func (d *Daemon) onSecretNeeded(req core.SecretRequest) {
+	name := req.ConnectionName
+	if name == "" {
+		name = req.SSID
+	}
+	if name == "" {
+		name = req.ConnectionUUID
+	}
+	e := core.Event{
+		Time:       d.now(),
+		Type:       core.EventSecretNeeded,
+		NetworkKey: secretNetworkKey(req),
+		Title:      "Password needed for " + name,
+		Body:       secretBody(req),
+		Urgency:    "normal",
+		Data: map[string]string{
+			"request_id":      req.ID,
+			"connection_uuid": req.ConnectionUUID,
+			"connection_name": req.ConnectionName,
+		},
+	}
+	if req.SSID != "" {
+		e.Data["ssid"] = req.SSID
+	}
+	if req.VPN {
+		e.Data["vpn"] = "true"
+	}
+	d.emitEvents(context.Background(), []core.Event{e})
+}
+
+// onSecretResolved is the broker's callback when a request ends.
+func (d *Daemon) onSecretResolved(id string, outcome core.SecretOutcome) {
+	title := "Password prompt " + string(outcome)
+	if outcome == core.SecretTimeout {
+		title = "Password prompt timed out"
+	}
+	e := core.Event{
+		Time:    d.now(),
+		Type:    core.EventSecretResolved,
+		Title:   title,
+		Urgency: "low",
+		Data:    map[string]string{"request_id": id, "outcome": string(outcome)},
+	}
+	d.emitEvents(context.Background(), []core.Event{e})
+}
+
+// secretNetworkKey files the event under the network it concerns.
+func secretNetworkKey(req core.SecretRequest) string {
+	switch {
+	case req.SSID != "":
+		return "wifi:" + req.SSID
+	case req.VPN && req.ConnectionUUID != "":
+		return "vpn:" + req.ConnectionUUID
+	case req.ConnectionUUID != "":
+		return "conn:" + req.ConnectionUUID
+	}
+	return ""
+}
+
+// secretBody says what is being asked and how to answer it from a shell.
+func secretBody(req core.SecretRequest) string {
+	labels := make([]string, 0, len(req.Fields))
+	for _, f := range req.Fields {
+		labels = append(labels, f.Label)
+	}
+	what := strings.Join(labels, ", ")
+	if what == "" {
+		what = "Password"
+	}
+	var b strings.Builder
+	b.WriteString(what)
+	switch {
+	case req.VPN && req.VPNKind != "":
+		b.WriteString(" for the " + req.VPNKind + " VPN")
+	case req.SSID != "":
+		b.WriteString(" for " + req.SSID)
+	}
+	if req.RequestNew {
+		b.WriteString(" (the previous one was rejected)")
+	}
+	b.WriteString(".")
+	if req.Message != "" {
+		b.WriteString(" " + req.Message)
+	}
+	b.WriteString(" run: bnm secrets")
+	return b.String()
 }
 
 // --- notify ------------------------------------------------------------------------------

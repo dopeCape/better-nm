@@ -23,16 +23,18 @@ import (
 
 // rig is an in-process bnmd on a temp socket, backed by internal/fake.
 type rig struct {
-	t      *testing.T
-	d      *daemon.Daemon
-	nm     *fake.NM
-	ts     *fake.VPNAdapter
-	wg     *fake.VPNAdapter
-	mon    *fake.Monitor
-	store  *fake.Store
-	speed  *fake.SpeedTester
-	socket string
-	dir    string
+	t       *testing.T
+	d       *daemon.Daemon
+	nm      *fake.NM
+	ts      *fake.VPNAdapter
+	wg      *fake.VPNAdapter
+	mon     *fake.Monitor
+	store   *fake.Store
+	speed   *fake.SpeedTester
+	secrets *fake.SecretBroker
+	ovpn    *fake.VPNAdapter
+	socket  string
+	dir     string
 }
 
 // shortTempDir avoids the 108-byte Unix socket path limit.
@@ -49,14 +51,18 @@ func shortTempDir(t *testing.T) string {
 func newRig(t *testing.T) *rig {
 	t.Helper()
 	r := &rig{
-		t:     t,
-		nm:    fake.NewNM(),
-		ts:    fake.NewTailscale(),
-		wg:    fake.NewWireGuard(),
-		mon:   fake.NewMonitor(),
-		store: fake.NewStore(),
-		speed: fake.NewSpeedTester(),
+		t:       t,
+		nm:      fake.NewNM(),
+		ts:      fake.NewTailscale(),
+		wg:      fake.NewWireGuard(),
+		mon:     fake.NewMonitor(),
+		store:   fake.NewStore(),
+		speed:   fake.NewSpeedTester(),
+		secrets: fake.NewSecretBroker(),
+		ovpn:    fake.NewNMVPN(),
 	}
+	r.nm.UseSecrets(r.secrets)
+	r.ovpn.Secrets = r.secrets
 	r.dir = shortTempDir(t)
 	r.socket = filepath.Join(r.dir, "bnmd.sock")
 	t.Setenv("XDG_STATE_HOME", r.dir)
@@ -65,7 +71,8 @@ func newRig(t *testing.T) *rig {
 	t.Setenv("CLICOLOR_FORCE", "")
 	d, err := daemon.New(daemon.Options{
 		NM:                r.nm,
-		VPN:               fake.NewVPNRegistry(r.ts, r.wg, fake.NewNMVPN()),
+		VPN:               fake.NewVPNRegistry(r.ts, r.wg, r.ovpn),
+		Secrets:           r.secrets,
 		Monitor:           r.mon,
 		Store:             r.store,
 		Speed:             r.speed,
@@ -1063,5 +1070,210 @@ func TestHelpers(t *testing.T) {
 	}
 	if u.dot("green") != "●" || u.dot("") != "○" {
 		t.Errorf("dots = %q %q", u.dot("green"), u.dot(""))
+	}
+}
+
+// interactive makes prompts possible even though the test's stdin is a pipe.
+func interactive(t *testing.T) {
+	t.Helper()
+	prev := stdinInteractive
+	stdinInteractive = func(*app) bool { return true }
+	t.Cleanup(func() { stdinInteractive = prev })
+}
+
+func TestSecretsCommands(t *testing.T) {
+	r := newRig(t)
+	ctx := context.Background()
+
+	res := r.ok("secrets")
+	wants(t, res.out, "no password prompts are waiting")
+
+	// A prompt raised by the agent is listed, in text and JSON.
+	answers := r.secrets.Raise(core.SecretRequest{
+		ConnectionUUID: "u-cafe", ConnectionName: "Cafe", SSID: "Cafe", SettingName: "802-11-wireless-security",
+		Fields: []core.SecretField{{Key: "psk", Label: "Wi-Fi password", Secret: true}}, RequestNew: true,
+	})
+	var list []core.SecretRequest
+	r.jsonInto(&list, "secrets")
+	if len(list) != 1 || list[0].SSID != "Cafe" {
+		t.Fatalf("json list = %+v", list)
+	}
+	id := list[0].ID
+	res = r.ok("secrets")
+	wants(t, res.out, "ID", "FOR", "ASKS", id, "Cafe", "Wi-Fi", "Wi-Fi password", "previous answer rejected", "expires in", "bnm secrets answer")
+	res = r.ok("secrets", "list")
+	wants(t, res.out, id)
+
+	// answer with no id picks the only prompt, reads the masked field from
+	// stdin and saves by default.
+	res = r.runIn(ctx, "hunter22\n", "secrets", "answer")
+	if res.code != 0 {
+		t.Fatalf("answer: %d %s", res.code, res.err)
+	}
+	wants(t, res.err, "Wrong password for Cafe; try again.", "Wi-Fi password for Cafe:")
+	wants(t, res.out, "Answered the prompt for Cafe")
+	select {
+	case a := <-answers:
+		if a.Secrets["psk"] != "hunter22" || !a.Save {
+			t.Fatalf("answer = %+v", a)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("no answer")
+	}
+	res = r.run("secrets", "answer", id)
+	if res.code != ExitError {
+		t.Fatalf("answered prompt must be gone: %d %s", res.code, res.err)
+	}
+	wants(t, res.err, "no open prompt")
+	res = r.run("secrets", "answer")
+	wants(t, res.err, "no password prompt is waiting")
+
+	// --no-save, non-secret fields echo, an id prefix works, the VPN message shows.
+	answers = r.secrets.Raise(core.SecretRequest{
+		ConnectionUUID: "u-vpn", ConnectionName: "office", VPN: true, VPNKind: "OpenVPN", SettingName: "vpn", Message: "Enter your token",
+		Fields: []core.SecretField{{Key: "username", Label: "Username", Secret: false}, {Key: "challenge-response", Label: "One-time code / challenge response", Secret: true}},
+	})
+	r.jsonInto(&list, "secrets")
+	id = list[0].ID
+	res = r.runIn(ctx, "tejas\n123456\n", "secrets", "answer", id[:4], "--no-save")
+	if res.code != 0 {
+		t.Fatalf("answer vpn: %d %s", res.code, res.err)
+	}
+	wants(t, res.err, "office (OpenVPN) needs username, one-time code / challenge response.", "Enter your token", "Username for office:", "One-time code / challenge response for office:")
+	a := <-answers
+	if a.Secrets["username"] != "tejas" || a.Secrets["challenge-response"] != "123456" || a.Save {
+		t.Fatalf("vpn answer = %+v", a)
+	}
+
+	// An empty secret cancels; cancel by id; unknown id.
+	answers = r.secrets.Raise(core.SecretRequest{ConnectionName: "Cafe", SSID: "Cafe", SettingName: "802-11-wireless-security"})
+	res = r.runIn(ctx, "\n", "secrets", "answer")
+	if res.code != 0 {
+		t.Fatalf("empty answer: %d %s", res.code, res.err)
+	}
+	wants(t, res.out, "Cancelled the prompt for Cafe")
+	if _, ok := <-answers; ok {
+		t.Fatal("empty answer must cancel")
+	}
+	answers = r.secrets.Raise(core.SecretRequest{ConnectionName: "Cafe", SSID: "Cafe", SettingName: "802-11-wireless-security"})
+	r.jsonInto(&list, "secrets")
+	res = r.ok("secrets", "cancel", list[0].ID)
+	wants(t, res.out, "Cancelled the prompt for Cafe")
+	if _, ok := <-answers; ok {
+		t.Fatal("cancel must close the channel")
+	}
+	res = r.run("secrets", "cancel", "nope")
+	if res.code != ExitError {
+		t.Fatalf("cancel unknown: %d", res.code)
+	}
+	wants(t, res.err, "no open prompt", "hint: run `bnm secrets`")
+	// Two prompts and no id is an error naming them.
+	r.secrets.Raise(core.SecretRequest{ConnectionName: "A", SSID: "A"})
+	r.secrets.Raise(core.SecretRequest{ConnectionName: "B", SSID: "B"})
+	res = r.run("secrets", "answer")
+	if res.code != ExitError {
+		t.Fatalf("ambiguous: %d", res.code)
+	}
+	wants(t, res.err, "2 prompts are waiting", "(A)", "(B)")
+}
+
+func TestWifiConnectPromptsThroughAgent(t *testing.T) {
+	r := newRig(t)
+	ctx := context.Background()
+
+	// A rejected --password is asked again on the terminal, marked as wrong,
+	// and the retry connects.
+	interactive(t)
+	res := r.runIn(ctx, "hunter22\n", "wifi", "connect", fake.NeighbourSSD, "--password", fake.WrongPassword)
+	if res.code != 0 {
+		t.Fatalf("retry: %d\nstdout: %s\nstderr: %s", res.code, res.out, res.err)
+	}
+	wants(t, res.err, "Wrong password for Neighbour5G; try again.", "Wi-Fi password for Neighbour5G:")
+	wants(t, res.out, "Connected to Neighbour5G")
+	st, _ := r.nm.Status(ctx)
+	if st.Primary == nil || st.Primary.ProfileName != fake.NeighbourSSD {
+		t.Fatalf("primary = %+v", st.Primary)
+	}
+	if p, _ := r.secrets.Pending(ctx); len(p) != 0 {
+		t.Fatalf("prompts left open: %+v", p)
+	}
+
+	// A too-short answer is asked again as wrong; an empty one gives up.
+	r.nm.AddAP(fake.WifiDevice, core.WifiNetwork{SSID: "Attic", Device: fake.WifiDevice, Security: core.SecWPAPSK, Strength: 40})
+	res = r.runIn(ctx, "short\nshort2\n\n", "wifi", "connect", "Attic", "--password", fake.WrongPassword)
+	if res.code != ExitError {
+		t.Fatalf("gave up: %d %s", res.code, res.err)
+	}
+	if n := strings.Count(res.err, "Wrong password for Attic; try again."); n != 3 {
+		t.Fatalf("want 3 retry headlines, got %d:\n%s", n, res.err)
+	}
+	wants(t, res.err, "error: no password given for Attic")
+	if p, _ := r.secrets.Pending(ctx); len(p) != 0 {
+		t.Fatalf("prompts left open: %+v", p)
+	}
+
+	// The pre-prompt for an unknown secured network still happens up front;
+	// the agent is only consulted when NM rejects it.
+	r.nm.AddAP(fake.WifiDevice, core.WifiNetwork{SSID: "Garden", Device: fake.WifiDevice, Security: core.SecSAE, Strength: 40})
+	res = r.runIn(ctx, "longenough\n", "wifi", "connect", "Garden")
+	if res.code != 0 {
+		t.Fatalf("pre-prompt: %d %s", res.code, res.err)
+	}
+	wants(t, res.err, "Password for Garden:")
+	if strings.Contains(res.err, "Wrong password") {
+		t.Fatalf("no retry expected: %s", res.err)
+	}
+
+	// Without a terminal a rejected flag password fails at once with exit 1
+	// and cancels the prompt, so NM gives up instead of waiting.
+	stdinInteractive = func(*app) bool { return false }
+	r.nm.AddAP(fake.WifiDevice, core.WifiNetwork{SSID: "Shed", Device: fake.WifiDevice, Security: core.SecWPAPSK, Strength: 40})
+	res = r.run("wifi", "connect", "Shed", "--password", fake.WrongPassword)
+	if res.code != ExitError {
+		t.Fatalf("non-tty wrong password: %d %s", res.code, res.err)
+	}
+	wants(t, res.err, "error: wrong password for Shed", "hint: check the password and try again")
+	if p, _ := r.secrets.Pending(ctx); len(p) != 0 {
+		t.Fatalf("prompt must be cancelled: %+v", p)
+	}
+}
+
+func TestVPNUpPromptsThroughAgent(t *testing.T) {
+	r := newRig(t)
+	ctx := context.Background()
+	vpns, _ := r.ovpn.List(ctx)
+	id := vpns[0].ID
+
+	// No terminal, no flag: the prompt stays open for `bnm secrets answer`.
+	res := r.run("vpn", "up", "office-ovpn")
+	if res.code != ExitError {
+		t.Fatalf("headless vpn up: %d %s", res.code, res.err)
+	}
+	wants(t, res.err, "error: office-ovpn needs vpn password and there is no terminal to ask on", "hint: run: bnm secrets answer ")
+	pending, _ := r.secrets.Pending(ctx)
+	if len(pending) != 1 || pending[0].ConnectionUUID != id || !pending[0].VPN {
+		t.Fatalf("pending = %+v", pending)
+	}
+	res = r.runIn(ctx, "s3cret\n", "secrets", "answer", pending[0].ID)
+	if res.code != 0 {
+		t.Fatalf("answer from another shell: %d %s", res.code, res.err)
+	}
+	wants(t, res.err, "office-ovpn (OpenVPN) needs vpn password.", "VPN password for office-ovpn:")
+
+	// --password answers the prompt once without a terminal.
+	res = r.ok("vpn", "up", "office-ovpn", "--password", "s3cret")
+	wants(t, res.out, "office-ovpn", "connected")
+	r.ok("vpn", "down", "office-ovpn")
+
+	// On a terminal the prompt is shown and answered inline.
+	interactive(t)
+	res = r.runIn(ctx, "s3cret\n", "vpn", "up", "office-ovpn")
+	if res.code != 0 {
+		t.Fatalf("interactive vpn up: %d %s", res.code, res.err)
+	}
+	wants(t, res.err, "VPN password for office-ovpn:")
+	wants(t, res.out, "connected")
+	if p, _ := r.secrets.Pending(ctx); len(p) != 0 {
+		t.Fatalf("prompts left open: %+v", p)
 	}
 }

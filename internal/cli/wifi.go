@@ -186,16 +186,26 @@ func (a *app) wifiConnectCmd() *cobra.Command {
 			}
 			needsSecret := seen != nil && !seen.Known && (seen.Security == core.SecWPAPSK || seen.Security == core.SecSAE || seen.Security == core.SecWEP)
 			if password == "" && (ask || needsSecret) {
-				if !ask && !a.stdinIsTerminal() {
+				if !ask && !stdinInteractive(a) {
 					return core.Errorf(core.KindInvalid, "pass --password or --ask", "%q needs a password", ssid)
 				}
-				password, err = readPassword(a.in, a.errw, fmt.Sprintf("Password for %s: ", ssid))
+				password, err = readPassword(a.lines(), a.errw, fmt.Sprintf("Password for %s: ", ssid))
 				if err != nil {
 					return err
 				}
 			}
 			req := core.ConnectWifiRequest{SSID: ssid, Password: password, Hidden: hidden, Device: device}
-			if err := c.ConnectWifi(ctx, req); err != nil {
+			// The password (if any) goes into the profile; NetworkManager only
+			// asks through the secret agent when it is missing or rejected, and
+			// those prompts are answered here while the request runs.
+			opts := promptOpts{
+				match: func(r core.SecretRequest) bool {
+					return !r.VPN && (r.SSID == ssid || r.ConnectionName == ssid || (seen != nil && seen.ProfileUUID != "" && r.ConnectionUUID == seen.ProfileUUID))
+				},
+				preset:     map[string]string{"psk": password, "wep-key0": password},
+				presetUsed: password != "",
+			}
+			if err := a.runWithPrompts(ctx, c, opts, func(ctx context.Context) error { return c.ConnectWifi(ctx, req) }); err != nil {
 				return err
 			}
 			a.done("%s Connected to %s", a.ui.dot("green"), ssid)
@@ -203,7 +213,7 @@ func (a *app) wifiConnectCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&password, "password", "", "pre-shared key (prefer --ask; it stays out of the shell history)")
-	cmd.Flags().BoolVar(&ask, "ask", false, "prompt for the password without echo")
+	cmd.Flags().BoolVar(&ask, "ask", false, "prompt for the password without echo (a rejected password is asked again either way)")
 	cmd.Flags().BoolVar(&hidden, "hidden", false, "the network does not broadcast its SSID")
 	cmd.Flags().StringVar(&device, "device", "", "Wi-Fi device to use (default: the first)")
 	return cmd

@@ -103,8 +103,8 @@ func setup(t *testing.T, p Policy) (*Filter, *fakeClock, *recorder) {
 
 func TestDefaultPolicy(t *testing.T) {
 	p := DefaultPolicy()
-	on := []core.EventType{core.EventConnected, core.EventDisconnected, core.EventNoInternet, core.EventInternetRestored, core.EventVPNUp, core.EventVPNDown}
-	off := []core.EventType{core.EventDegraded, core.EventRecovered, core.EventWifiScan, core.EventStateChanged}
+	on := []core.EventType{core.EventConnected, core.EventDisconnected, core.EventNoInternet, core.EventInternetRestored, core.EventVPNUp, core.EventVPNDown, core.EventSecretNeeded}
+	off := []core.EventType{core.EventDegraded, core.EventRecovered, core.EventWifiScan, core.EventStateChanged, core.EventSecretResolved}
 	for _, ty := range on {
 		if !p.IsEnabled(ty) {
 			t.Errorf("%s should be on", ty)
@@ -316,4 +316,26 @@ func TestFilterConcurrent(t *testing.T) {
 	}
 	wg.Wait()
 	f.Flush()
+}
+
+// A password prompt is never held, rate-limited or muted: a wrong-password
+// retry seconds later on a muted network must still reach the user.
+func TestFilterSecretNeededBypassesEverything(t *testing.T) {
+	p := DefaultPolicy()
+	p.MutedNetworks = []string{"wifi:Cafe"}
+	f, clock, rec := setup(t, p)
+	for i := 0; i < 3; i++ {
+		if !f.Allow(ev(core.EventSecretNeeded, "wifi:Cafe")) {
+			t.Fatalf("prompt %d was filtered", i)
+		}
+		clock.Advance(time.Second)
+	}
+	if f.Pending() != 0 || len(rec.types()) != 0 {
+		t.Fatalf("prompts must not be held: pending=%d ready=%d", f.Pending(), len(rec.types()))
+	}
+	p.Enabled[core.EventSecretNeeded] = false
+	f, _, _ = setup(t, p)
+	if f.Allow(ev(core.EventSecretNeeded, "wifi:Home")) {
+		t.Fatal("disabled secret-needed must be filtered")
+	}
 }

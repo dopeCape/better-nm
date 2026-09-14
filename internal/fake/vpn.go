@@ -20,6 +20,9 @@ type VPNAdapter struct {
 	Latency time.Duration
 	// LoginURL is what Login returns.
 	LoginURL string
+	// Secrets, when set on an nm-vpn adapter, makes Connect prompt for the VPN
+	// password (once per Connect) the way the NM agent does.
+	Secrets *SecretBroker
 }
 
 // NewVPNAdapter returns an adapter owning vpns.
@@ -116,6 +119,30 @@ func cloneVPN(v core.VPN) core.VPN {
 }
 
 func (a *VPNAdapter) Connect(ctx context.Context, id string) error {
+	a.mu.Lock()
+	b := a.Secrets
+	failing := a.fail["Connect"] != nil
+	var v *core.VPN
+	if i := a.indexLocked(id); i >= 0 {
+		vv := a.vpns[i]
+		v = &vv
+	}
+	a.mu.Unlock()
+	if b != nil && v != nil && a.backend == core.BackendNMVPN && !failing {
+		req := core.SecretRequest{
+			ConnectionUUID: v.ID, ConnectionName: v.Name, VPN: true, VPNKind: v.Kind, SettingName: "vpn",
+			Fields:        []core.SecretField{{Key: "password", Label: "VPN password", Secret: true}},
+			UserRequested: true,
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case ans, ok := <-b.Raise(req):
+			if !ok || ans.Secrets["password"] == "" {
+				return core.Errorf(core.KindInvalid, "the password prompt was cancelled or not answered in time", "vpn: %s: no secrets available", v.Name)
+			}
+		}
+	}
 	return a.transition("Connect", id, core.VPNConnected)
 }
 

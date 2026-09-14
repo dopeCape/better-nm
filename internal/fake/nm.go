@@ -27,6 +27,9 @@ const (
 	WiredUUID    = "33333333-3333-4333-8333-333333333333"
 	CafeSSID     = "CoffeeShop"
 	NeighbourSSD = "Neighbour5G"
+	// WrongPassword is a password a prompting NM (UseSecrets) rejects, so
+	// the retry prompt (RequestNew) can be exercised.
+	WrongPassword = "wrong"
 )
 
 // NM is an in-memory core.NetworkManager.
@@ -45,6 +48,9 @@ type NM struct {
 	fail        map[string]error
 	nextUUID    int
 	watchers    []chan core.Change
+	// secrets, when set, prompts for a missing Wi-Fi password the way the NM
+	// agent does instead of failing (UseSecrets).
+	secrets *SecretBroker
 }
 
 // NewNM returns a seeded world: one Wi-Fi device (4 SSIDs, HomeNet active and
@@ -262,8 +268,72 @@ func (n *NM) ActiveConnections(ctx context.Context) ([]core.ActiveConnection, er
 	return append([]core.ActiveConnection(nil), n.active...), nil
 }
 
+// UseSecrets makes ConnectWifi prompt through b when a secured, unknown
+// network is joined without a password or with WrongPassword (the latter as
+// a RequestNew retry), and again, marked RequestNew, when an answer is shorter
+// than the 8 characters WPA needs; this mirrors the real agent path so
+// surfaces can be exercised against `bnmd --fake`.
+func (n *NM) UseSecrets(b *SecretBroker) {
+	n.mu.Lock()
+	n.secrets = b
+	n.mu.Unlock()
+}
+
+// askPassword raises a psk request for ssid and waits for the answer. Called
+// with the mutex released.
+func (n *NM) askPassword(ctx context.Context, b *SecretBroker, ssid, uuid string, retry bool) (string, error) {
+	req := core.SecretRequest{
+		ConnectionUUID: uuid, ConnectionName: ssid, SSID: ssid, SettingName: "802-11-wireless-security",
+		Fields:     []core.SecretField{{Key: "psk", Label: "Wi-Fi password", Secret: true}},
+		RequestNew: retry, UserRequested: true,
+	}
+	ch := b.Raise(req)
+	select {
+	case <-ctx.Done():
+		return "", core.Errorf(core.KindInternal, "", "nm: connect %s: %v", ssid, ctx.Err())
+	case a, ok := <-ch:
+		if !ok {
+			return "", core.Errorf(core.KindInvalid, "the password prompt was cancelled or not answered in time; retry, or pass --password", "nm: %s: no secrets available", ssid)
+		}
+		return a.Secrets["psk"], nil
+	}
+}
+
 func (n *NM) ConnectWifi(ctx context.Context, req core.ConnectWifiRequest) error {
 	n.mu.Lock()
+	if n.secrets != nil && (req.Password == "" || req.Password == WrongPassword) && !req.Hidden {
+		dev := req.Device
+		if dev == "" {
+			dev = WifiDevice
+		}
+		var net *core.WifiNetwork
+		for i := range n.aps[dev] {
+			if n.aps[dev][i].SSID == req.SSID {
+				net = &n.aps[dev][i]
+			}
+		}
+		if net != nil && !net.Known && (net.Security == core.SecWPAPSK || net.Security == core.SecSAE) && n.failing("ConnectWifi") == nil {
+			b := n.secrets
+			n.mu.Unlock()
+			uuid := fmt.Sprintf("prompt-%s", req.SSID)
+			rejected := req.Password == WrongPassword
+			req.Password = ""
+			for round := 0; round < 3; round++ {
+				pw, err := n.askPassword(ctx, b, req.SSID, uuid, rejected || round > 0)
+				if err != nil {
+					return err
+				}
+				if len(pw) >= 8 {
+					req.Password = pw
+					break
+				}
+			}
+			if req.Password == "" {
+				return core.Errorf(core.KindInvalid, "check the password and try again", "nm: connect %s: wrong password", req.SSID)
+			}
+			n.mu.Lock()
+		}
+	}
 	defer n.mu.Unlock()
 	if err := n.failing("ConnectWifi"); err != nil {
 		return err

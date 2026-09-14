@@ -228,9 +228,11 @@ func (v view) bestAP(dev dbus.ObjectPath, ssid string) (accessPoint, bool) {
 // ConnectWifi joins req.SSID on req.Device. With a saved profile for the SSID it
 // activates that (refreshing the PSK when a password is given); otherwise it
 // creates one with AddAndActivateConnection2, scoped to the current user,
-// with the secret stored system-owned (psk-flags 0) so no agent is needed. It
-// returns once the ActiveConnection is activated, or with a translated error
-// when it deactivated / timed out.
+// with the secret stored system-owned (psk-flags 0). When no password is given
+// and the secret agent is registered, the profile is created without the
+// secret and NM prompts for it through the agent; the wait for the activation
+// is extended while that prompt is open. It returns once the ActiveConnection
+// is activated, or with a translated error when it deactivated / timed out.
 func (c *Client) ConnectWifi(ctx context.Context, req core.ConnectWifiRequest) error {
 	op := "connect wifi " + req.SSID
 	if strings.TrimSpace(req.SSID) == "" {
@@ -275,7 +277,12 @@ func (c *Client) ConnectWifi(ctx context.Context, req core.ConnectWifiRequest) e
 		return newErr(op, ErrUnsupported, "WPA-EAP (enterprise) networks are unsupported in v1")
 	}
 	hidden := req.Hidden || !haveAP
-	settings, err := wifiPartialSettings(req.SSID, hidden, sec, req.Password, c.username)
+	// Without a password the profile is created with the secret system-owned
+	// but absent; NM then asks the secret agent, which prompts through the
+	// surfaces and NM stores the answer. Without an agent that would just fail,
+	// so keep the immediate error in that case.
+	prompt := req.Password == "" && c.AgentRegistered()
+	settings, err := wifiPartialSettings(req.SSID, hidden, sec, req.Password, c.username, prompt)
 	if err != nil {
 		return err
 	}
@@ -326,8 +333,6 @@ func (c *Client) waitActive(ctx context.Context, op string, path dbus.ObjectPath
 	if !realPath(path) {
 		return nil
 	}
-	ctx, cancel := context.WithTimeout(ctx, c.activateTimeout)
-	defer cancel()
 	ch := c.addWaiter(path)
 	defer c.removeWaiter(path, ch)
 
@@ -347,21 +352,38 @@ func (c *Client) waitActive(ctx context.Context, op string, path dbus.ObjectPath
 
 // waitLoop is waitActive without the live pre-read (signal-driven only).
 func (c *Client) waitLoop(ctx context.Context, op string, path dbus.ObjectPath) error {
-	ctx, cancel := context.WithTimeout(ctx, c.activateTimeout)
-	defer cancel()
 	ch := c.addWaiter(path)
 	defer c.removeWaiter(path, ch)
 	return c.waitEvents(ctx, op, path, ch)
 }
 
+// waitEvents consumes StateChanged events for path until it settles. The
+// activateTimeout is not a hard deadline: while a secret request for the
+// profile is pending (NM is waiting for a person to type a password through
+// the agent) the wait is extended, and once that request resolves the full
+// timeout is granted again for the activation to finish.
 func (c *Client) waitEvents(ctx context.Context, op string, path dbus.ObjectPath, ch chan activeEvent) error {
+	timer := time.NewTimer(c.activateTimeout)
+	defer timer.Stop()
+	extended := false
 	for {
 		select {
 		case <-ctx.Done():
-			if errors.Is(ctx.Err(), context.DeadlineExceeded) {
-				return newErr(op, ErrTimeout, "NetworkManager did not finish activating within "+c.activateTimeout.String())
+			// Wrap the context error so callers can tell "the caller went
+			// away" (keep a new profile, NM may still finish) from a failure.
+			return &Error{Op: op, kind: ctx.Err()}
+		case <-timer.C:
+			if c.secretPending(ctx, path) {
+				extended = true
+				timer.Reset(secretPollInterval)
+				continue
 			}
-			return newErr(op, nil, ctx.Err().Error())
+			if extended {
+				extended = false
+				timer.Reset(c.activateTimeout)
+				continue
+			}
+			return newErr(op, ErrTimeout, "NetworkManager did not finish activating within "+c.activateTimeout.String())
 		case ev, ok := <-ch:
 			if !ok {
 				return newErr(op, ErrUnavailable, "client closed")
@@ -374,6 +396,32 @@ func (c *Client) waitEvents(ctx context.Context, op string, path dbus.ObjectPath
 			}
 		}
 	}
+}
+
+// connectionOf resolves an ActiveConnection to its Settings/N profile path,
+// from the cache or with one live read.
+func (c *Client) connectionOf(ctx context.Context, active dbus.ObjectPath) dbus.ObjectPath {
+	if p := vPath(c.propsOf(active, ifaceActive), "Connection"); realPath(p) {
+		return p
+	}
+	if c.conn == nil {
+		return ""
+	}
+	if v, err := c.getProp(ctx, active, ifaceActive, "Connection"); err == nil {
+		if p, ok := v.Value().(dbus.ObjectPath); ok && realPath(p) {
+			return p
+		}
+	}
+	return ""
+}
+
+// secretPending says whether the agent holds an open request for the profile
+// behind the ActiveConnection at active.
+func (c *Client) secretPending(ctx context.Context, active dbus.ObjectPath) bool {
+	if c.agent == nil {
+		return false
+	}
+	return c.agent.pendingFor(c.connectionOf(ctx, active))
 }
 
 // activationError translates why an activation ended into a typed error, using

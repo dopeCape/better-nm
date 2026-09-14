@@ -28,7 +28,7 @@ type world struct {
 	done     chan error
 }
 
-func newWorld(t *testing.T) *world {
+func newWorld(t *testing.T, tweaks ...func(*Options)) *world {
 	t.Helper()
 	w := &world{
 		nm:       fake.NewNM(),
@@ -38,7 +38,7 @@ func newWorld(t *testing.T) *world {
 		notifier: fake.NewNotifier(),
 		speed:    fake.NewSpeedTester(),
 	}
-	d, err := New(Options{
+	opts := Options{
 		NM:                w.nm,
 		VPN:               fake.NewVPNRegistry(w.ts, fake.NewWireGuard()),
 		Monitor:           w.mon,
@@ -53,7 +53,11 @@ func newWorld(t *testing.T) *world {
 		Version:           "test",
 		Debounce:          50 * time.Millisecond,
 		ConnectivityGrace: 50 * time.Millisecond,
-	})
+	}
+	for _, tw := range tweaks {
+		tw(&opts)
+	}
+	d, err := New(opts)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -613,5 +617,127 @@ func TestRunFailsWhenNMUnreadable(t *testing.T) {
 	d, _ := New(Options{NM: nm, Store: fake.NewStore(), Logger: slog.New(slog.DiscardHandler)})
 	if err := d.Run(context.Background()); err == nil || !strings.Contains(err.Error(), "bus gone") {
 		t.Errorf("Run = %v", err)
+	}
+}
+
+func TestSecretFlow(t *testing.T) {
+	broker := fake.NewSecretBroker()
+	w := newWorld(t, func(o *Options) { o.Secrets = broker })
+	ctx := context.Background()
+	ch, cancel := w.d.Subscribe()
+	defer cancel()
+
+	// A request from the agent becomes a secret-needed event: stored,
+	// streamed and handed to the notifier, naming the request.
+	answers := broker.Raise(core.SecretRequest{
+		ConnectionUUID: "u-cafe", ConnectionName: "Cafe", SSID: "Cafe", SettingName: "802-11-wireless-security",
+		Fields: []core.SecretField{{Key: "psk", Label: "Wi-Fi password", Secret: true}}, RequestNew: true,
+	})
+	e := waitEvent(t, ch, core.EventSecretNeeded, 2*time.Second)
+	id := e.Data["request_id"]
+	if id == "" || e.Data["ssid"] != "Cafe" || e.Data["connection_uuid"] != "u-cafe" {
+		t.Fatalf("event data = %v", e.Data)
+	}
+	if e.Title != "Password needed for Cafe" || e.Urgency != "normal" || e.NetworkKey != "wifi:Cafe" {
+		t.Fatalf("event = %+v", e)
+	}
+	if !strings.Contains(e.Body, "run: bnm secrets") || !strings.Contains(e.Body, "Wi-Fi password for Cafe") || !strings.Contains(e.Body, "rejected") {
+		t.Fatalf("body = %q", e.Body)
+	}
+	stored, _ := w.store.Events(ctx, 100)
+	found := false
+	for _, se := range stored {
+		if se.Type == core.EventSecretNeeded && se.Data["request_id"] == id {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("secret-needed not stored")
+	}
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		notified := false
+		for _, ne := range w.notifier.Events() {
+			if ne.Type == core.EventSecretNeeded {
+				notified = true
+			}
+		}
+		if notified || time.Now().After(deadline) {
+			if !notified {
+				t.Fatal("secret-needed never reached the notifier")
+			}
+			break
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+
+	pending, err := w.d.PendingSecrets(ctx)
+	if err != nil || len(pending) != 1 || pending[0].ID != id {
+		t.Fatalf("pending = %+v %v", pending, err)
+	}
+	if r, err := w.d.Secret(ctx, id); err != nil || r.SSID != "Cafe" {
+		t.Fatalf("Secret = %+v %v", r, err)
+	}
+	if _, err := w.d.Secret(ctx, "nope"); core.KindOf(err) != core.KindNotFound {
+		t.Fatalf("unknown id: %v", err)
+	}
+	if err := w.d.AnswerSecret(ctx, id, core.SecretAnswer{}); core.KindOf(err) != core.KindInvalid {
+		t.Fatalf("empty answer: %v", err)
+	}
+	if err := w.d.AnswerSecret(ctx, id, core.SecretAnswer{Secrets: map[string]string{"psk": "hunter22"}, Save: true}); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case a := <-answers:
+		if a.Secrets["psk"] != "hunter22" || !a.Save {
+			t.Fatalf("answer = %+v", a)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("answer never reached the broker")
+	}
+	e = waitEvent(t, ch, core.EventSecretResolved, 2*time.Second)
+	if e.Data["request_id"] != id || e.Data["outcome"] != string(core.SecretAnswered) {
+		t.Fatalf("resolved = %v", e.Data)
+	}
+	if err := w.d.AnswerSecret(ctx, id, core.SecretAnswer{Secrets: map[string]string{"psk": "x"}}); core.KindOf(err) != core.KindConflict {
+		t.Fatalf("second answer: %v", err)
+	}
+	if p, _ := w.d.PendingSecrets(ctx); len(p) != 0 {
+		t.Fatalf("pending after answer = %v", p)
+	}
+
+	// Cancel.
+	answers = broker.Raise(core.SecretRequest{ConnectionUUID: "u-vpn", ConnectionName: "office", VPN: true, VPNKind: "OpenVPN", SettingName: "vpn",
+		Fields: []core.SecretField{{Key: "password", Label: "VPN password", Secret: true}}, Message: "Enter your token"})
+	e = waitEvent(t, ch, core.EventSecretNeeded, 2*time.Second)
+	if e.NetworkKey != "vpn:u-vpn" || e.Data["vpn"] != "true" || !strings.Contains(e.Body, "OpenVPN VPN") || !strings.Contains(e.Body, "Enter your token") {
+		t.Fatalf("vpn event = %+v", e)
+	}
+	if err := w.d.CancelSecret(ctx, e.Data["request_id"]); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := <-answers; ok {
+		t.Fatal("cancel must close the answer channel without a value")
+	}
+	e = waitEvent(t, ch, core.EventSecretResolved, 2*time.Second)
+	if e.Data["outcome"] != string(core.SecretCancelled) {
+		t.Fatalf("outcome = %v", e.Data)
+	}
+	if err := w.d.CancelSecret(ctx, "nope"); core.KindOf(err) != core.KindNotFound {
+		t.Fatalf("cancel unknown: %v", err)
+	}
+}
+
+func TestSecretsUnsupportedWithoutBroker(t *testing.T) {
+	w := newWorld(t)
+	ctx := context.Background()
+	if _, err := w.d.PendingSecrets(ctx); core.KindOf(err) != core.KindUnsupported {
+		t.Fatalf("pending: %v", err)
+	}
+	if err := w.d.AnswerSecret(ctx, "x", core.SecretAnswer{Secrets: map[string]string{"psk": "y"}}); core.KindOf(err) != core.KindUnsupported {
+		t.Fatalf("answer: %v", err)
+	}
+	if err := w.d.CancelSecret(ctx, "x"); core.KindOf(err) != core.KindUnsupported {
+		t.Fatalf("cancel: %v", err)
 	}
 }
