@@ -28,7 +28,11 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           AUR_KEY: ${{ secrets.AUR_KEY }}
 
-  appimage:
+  # The Tauri desktop app, built natively per arch on the oldest supported LTS so the
+  # AppImage's glibc floor stays low. Uploads AppImage, deb and rpm to the release that
+  # goreleaser created. The bundle version comes from the tag: tauri.conf.json keeps
+  # 0.1.0 in git and `--config '{"version": ...}'` overrides it at build time.
+  desktop:
     needs: goreleaser
     strategy:
       matrix:
@@ -38,19 +42,36 @@ jobs:
           - runner: ubuntu-22.04-arm
             arch: aarch64
     runs-on: ${{ matrix.runner }}
+    defaults:
+      run:
+        working-directory: desktop
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - name: Tauri Linux deps
+        run: sudo apt-get update -q && sudo apt-get install -y -q libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev libsoup-3.0-dev patchelf file
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
         with:
-          go-version-file: go.mod
-          cache: true
-      - name: Fyne build deps
-        run: sudo apt-get update -q && sudo apt-get install -y -q gcc libgl1-mesa-dev xorg-dev libxkbcommon-dev libwayland-dev libfuse2 file desktop-file-utils
-      - name: Build desktop app
-        run: make desktop VERSION=${GITHUB_REF_NAME}
-      - name: Build AppImage
-        run: VERSION=${GITHUB_REF_NAME} ARCH=${{ matrix.arch }} packaging/appimage/build.sh
+          workspaces: desktop/src-tauri
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: desktop/package.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: desktop/pnpm-lock.yaml
+      - name: Build bundles (AppImage, deb, rpm)
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          pnpm install --frozen-lockfile
+          pnpm tauri build --config "{\"version\":\"${version}\"}"
+          ls -l src-tauri/target/release/bundle/appimage/*.AppImage src-tauri/target/release/bundle/deb/*.deb src-tauri/target/release/bundle/rpm/*.rpm
       - name: Upload to release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release upload "${GITHUB_REF_NAME}" dist/bnm-desktop-*.AppImage --clobber
+        run: |
+          gh release upload "${GITHUB_REF_NAME}" --clobber \
+            src-tauri/target/release/bundle/appimage/*.AppImage \
+            src-tauri/target/release/bundle/deb/*.deb \
+            src-tauri/target/release/bundle/rpm/*.rpm

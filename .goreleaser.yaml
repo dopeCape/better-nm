@@ -99,4 +99,4 @@ release:
     name: better-nm
   draft: false
   prerelease: auto
-  # The AppImage job uploads bnm-desktop-*.AppImage to this release separately.
+  # The desktop job in release.yml uploads the bnm-desktop AppImage, deb and rpm to this release separately.

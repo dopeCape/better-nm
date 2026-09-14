@@ -16,8 +16,6 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
-      - name: Fyne build deps (the desktop package is cgo)
-        run: sudo apt-get update -q && sudo apt-get install -y -q gcc libgl1-mesa-dev xorg-dev libxkbcommon-dev libwayland-dev
       - name: Lint
         run: |
           go vet ./...
@@ -26,23 +24,54 @@ jobs:
         run: go test -race -count=1 ./...
       - name: Integration tests (python-dbusmock NetworkManager template)
         run: |
-          sudo apt-get install -y -q python3-dbusmock dbus python3-gi
+          sudo apt-get update -q && sudo apt-get install -y -q python3-dbusmock dbus python3-gi
           BNM_INTEGRATION=1 go test -tags integration -count=1 ./internal/nm/...
       - name: Build static binaries
         run: make build
 
+  # The Tauri 2 desktop app: React frontend (desktop/) + Rust shell (desktop/src-tauri).
   desktop:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: desktop
     steps:
       - uses: actions/checkout@v4
+      - name: Tauri Linux deps
+        run: sudo apt-get update -q && sudo apt-get install -y -q libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev libsoup-3.0-dev patchelf
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: desktop/src-tauri
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: desktop/package.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: desktop/pnpm-lock.yaml
+      # cargo test runs tests/daemon_live.rs against a real `bnmd --fake`, which it builds with go.
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
           cache: true
-      - name: Fyne build deps
-        run: sudo apt-get update -q && sudo apt-get install -y -q gcc libgl1-mesa-dev xorg-dev libxkbcommon-dev libwayland-dev
-      - name: Build desktop app
-        run: make desktop
+      - name: Frontend
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm typecheck
+          pnpm lint
+          pnpm test
+      - name: Shell
+        working-directory: desktop/src-tauri
+        run: |
+          cargo fmt --check
+          cargo clippy --all-targets -- -D warnings
+          cargo test
+      - name: Build (binary only; the release workflow bundles)
+        run: pnpm tauri build --no-bundle
 
   nix:
     runs-on: ubuntu-24.04
@@ -50,5 +79,9 @@ jobs:
       - uses: actions/checkout@v4
       - uses: DeterminateSystems/nix-installer-action@v16
       - uses: DeterminateSystems/magic-nix-cache-action@v9
-      - name: nix build (keeps vendorHash honest)
+      - name: nix build .#bnm (keeps vendorHash honest)
         run: nix build .#bnm --print-build-logs
+      # webkitgtk + a full Rust release build: too slow for every PR, so main only.
+      - name: nix build .#bnm-desktop (keeps the pnpm hash and Cargo.lock honest)
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: nix build .#bnm-desktop --print-build-logs
