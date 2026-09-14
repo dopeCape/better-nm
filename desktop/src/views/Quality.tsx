@@ -20,7 +20,7 @@ export function Quality() {
   const m = monitor.data;
 
   const pause = useAction(async (paused: boolean) => (paused ? actions.monitorResume() : actions.monitorPause()), { invalidate: [qk.monitor], label: "Monitoring" });
-  const reset = useAction(actions.monitorReset, { invalidate: [qk.monitor, ["monitor", "samples"]], label: "Reset baseline" });
+  const reset = useAction(actions.monitorReset, { invalidate: [qk.monitor], label: "Reset baseline" });
   useHotkey("p", () => void pause.run(m?.paused ?? false), !!m);
 
   const interval = m ? nsToSeconds(m.interval) : 30;

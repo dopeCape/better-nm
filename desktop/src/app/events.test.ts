@@ -50,7 +50,9 @@ describe("event routing", () => {
     // The pairs the views depend on.
     expect(CHANGE_TARGETS.active).toContainEqual(qk.wifi);
     expect(CHANGE_TARGETS.profiles).toContainEqual(qk.devices);
-    expect(CHANGE_TARGETS.monitor).toContainEqual(["monitor", "samples"]);
+    // A monitor hint reaches the samples query through the ["monitor"] prefix, once.
+    const samplesKey = qk.samples("k", 200);
+    expect(CHANGE_TARGETS.monitor.some((k) => (k as readonly string[]).every((part, i) => samplesKey[i] === part))).toBe(true);
     off();
   });
 

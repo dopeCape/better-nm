@@ -35,7 +35,9 @@ export const CHANGE_TARGETS: Record<ChangeKind, readonly (readonly unknown[])[]>
   profiles: [qk.profiles, qk.wifi, qk.devices],
   active: [qk.active, qk.status, qk.devices, qk.wifi, qk.vpn],
   vpn: [qk.vpn],
-  monitor: [qk.monitor, ["monitor", "samples"]],
+  // ["monitor"] is a prefix of the samples keys, so one invalidation covers both;
+  // listing the samples key as well cancelled and restarted the same fetch.
+  monitor: [qk.monitor],
 };
 
 export function invalidateFor(qc: QueryClient, kind: ChangeKind): void {
