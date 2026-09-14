@@ -24,10 +24,13 @@ desktop:
 	cd desktop && pnpm install --frozen-lockfile && pnpm tauri build --no-bundle
 	install -Dm755 $(TAURI_TARGET)/bnm-desktop $(BIN)/bnm-desktop
 
-# AppImage, deb and rpm under desktop/src-tauri/target/release/bundle/.
+# AppImage, deb and rpm under desktop/src-tauri/target/release/bundle/. The AppImage
+# bundler assumes an FHS distro (/usr/bin/xdg-open, one -L from pkg-config); on NixOS use
+# TAURI_BUNDLES="deb rpm". Release AppImages come from the ubuntu-22.04 runners anyway.
+TAURI_BUNDLES ?= appimage deb rpm
 desktop-bundle:
-	cd desktop && pnpm install --frozen-lockfile && pnpm tauri build
-	@ls -1 $(TAURI_TARGET)/bundle/appimage/*.AppImage $(TAURI_TARGET)/bundle/deb/*.deb $(TAURI_TARGET)/bundle/rpm/*.rpm
+	cd desktop && pnpm install --frozen-lockfile && pnpm tauri build --bundles $(TAURI_BUNDLES)
+	@find $(TAURI_TARGET)/bundle -maxdepth 2 -type f \( -name '*.AppImage' -o -name '*.deb' -o -name '*.rpm' \) -exec ls -l {} +
 
 # Installs bnm, bnmd and bnm-desktop under $(PREFIX)/bin (default ~/.local/bin, which is
 # on PATH on most desktops) plus the launcher entry and icon. `make desktop` first if you

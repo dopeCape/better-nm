@@ -56,7 +56,8 @@
           "network-manager"
         ],
         "recommends": [
-          "libnotify4"
+          "libnotify4",
+          "bnm"
         ],
         "section": "net",
         "desktopTemplate": "bnm-desktop.desktop.hbs"
@@ -66,7 +67,8 @@
           "NetworkManager"
         ],
         "recommends": [
-          "libnotify"
+          "libnotify",
+          "bnm"
         ],
         "desktopTemplate": "bnm-desktop.desktop.hbs"
       },
