@@ -57,16 +57,19 @@ impl SseParser {
         Self::default()
     }
 
-    /// Feeds bytes and returns every item completed by them.
+    /// Feeds bytes and returns every item completed by them. Lines end in LF, CRLF
+    /// or a bare CR; a CR that is the last byte seen waits for the next chunk so a
+    /// split CRLF is not read as two line ends.
     pub fn feed(&mut self, bytes: &[u8]) -> Vec<SseItem> {
         self.buf.extend_from_slice(bytes);
         let mut out = Vec::new();
-        while let Some(pos) = self.buf.iter().position(|&b| b == b'\n') {
-            let mut line: Vec<u8> = self.buf.drain(..=pos).collect();
-            line.pop(); // the \n
-            if line.last() == Some(&b'\r') {
-                line.pop();
+        while let Some(pos) = self.buf.iter().position(|&b| b == b'\n' || b == b'\r') {
+            let crlf = self.buf[pos] == b'\r' && self.buf.get(pos + 1) == Some(&b'\n');
+            if self.buf[pos] == b'\r' && pos + 1 == self.buf.len() {
+                break; // could be the first half of a CRLF
             }
+            let line: Vec<u8> = self.buf.drain(..pos).collect();
+            self.buf.drain(..if crlf { 2 } else { 1 });
             let line = String::from_utf8_lossy(&line).into_owned();
             if let Some(item) = self.line(&line) {
                 out.push(item);
@@ -447,6 +450,40 @@ mod tests {
             vec![SseItem::Event {
                 name: "message".into(),
                 data: "y".into()
+            }]
+        );
+    }
+
+    #[test]
+    fn bare_cr_and_split_crlf() {
+        let mut p = SseParser::new();
+        // CR alone ends a line (the trailing CR waits until the next byte shows
+        // it is not half of a CRLF).
+        assert_eq!(p.feed(b"data: a\r\r"), vec![]);
+        assert_eq!(
+            p.feed(b"data"),
+            vec![SseItem::Event {
+                name: "message".into(),
+                data: "a".into()
+            }]
+        );
+        // A CRLF split across chunks is one line end, not two.
+        assert_eq!(p.feed(b": b\r"), vec![]);
+        assert_eq!(p.feed(b"\n"), vec![]);
+        assert_eq!(
+            p.feed(b"\r\n"),
+            vec![SseItem::Event {
+                name: "message".into(),
+                data: "b".into()
+            }]
+        );
+        // A trailing CR at the very end is held until more arrives.
+        assert_eq!(p.feed(b"data: c\r"), vec![]);
+        assert_eq!(
+            p.feed(b"data: d\n\n"),
+            vec![SseItem::Event {
+                name: "message".into(),
+                data: "c\nd".into()
             }]
         );
     }
