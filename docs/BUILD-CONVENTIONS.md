@@ -10,3 +10,11 @@
 - Docs: a package comment at the top of one file saying what the package owns and how it is tested.
 - Git: work on the branch named in your task, commit as `git -c user.name=dopeCape -c user.email=dopeCape@users.noreply.github.com commit`, end messages with `Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>`. Push with plain `git push -u origin <branch>` (a repo-local credential helper handles auth). Never run `gh auth switch`; prefix `gh` with `GH_TOKEN=$(gh auth token --user dopeCape)`.
 - Do not edit files outside the packages your task names, except `go.mod`/`go.sum` via `go get`.
+
+## Desktop app (`desktop/`)
+
+- Tauri 2: Rust shell in `desktop/src-tauri` (crate `bnm-desktop`), React frontend in `desktop/src`; `desktop/CONTRACT.md` is the boundary. Work inside `nix develop` (rustc, cargo, node 24, pnpm 11, WebKitGTK 4.1 and friends), from `desktop/`.
+- Frontend: `pnpm install --frozen-lockfile`, then `pnpm typecheck`, `pnpm lint`, `pnpm test` must pass. Never edit `pnpm-lock.yaml` by hand; `pnpm add` only when truly needed. Changing the lockfile invalidates `pnpmDeps.hash` in `flake.nix`: set it to `""`, run `nix build .#bnm-desktop`, paste the `got:` hash.
+- Shell: `cargo fmt --check`, `cargo clippy --all-targets -- -D warnings`, `cargo test` (the live test builds `bnmd --fake` with `go`). `Cargo.lock` is committed and read by `flake.nix` (`cargoLock.lockFile`); there is no `cargoHash` to bump.
+- Build: `make desktop` (binary, via `pnpm tauri build --no-bundle`) or `make desktop-bundle` (AppImage, deb, rpm). CI builds the binary on every PR; `release.yml` bundles per arch on tag push with the version taken from the tag: it rewrites `version` in `src-tauri/Cargo.toml`, the only place the version lives (`tauri.conf.json` has no `version` key, so bundle names and `CARGO_PKG_VERSION` both follow Cargo.toml), which stays `0.1.0` in git.
+- Bundle metadata lives in `desktop/src-tauri/tauri.conf.json` (`productName` and `mainBinaryName` are `bnm-desktop`, which names the deb/rpm/AppImage and the installed `.desktop` file). `packaging/desktop/` keeps the launcher entry and icon that `make install` uses.

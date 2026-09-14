@@ -289,3 +289,17 @@ Per channel:
   never, Nix declarative, AppImage self-install. Decide whether `bnm daemon install` is also
   the fallback for every channel when the user unit is not enabled.
 - Source AUR package (`aur_sources`) doubles maintenance; decide whether `-bin` alone is v1.
+
+## Addendum (2026-09-14): the desktop app moved to Tauri 2
+
+The Fyne app and the hand-rolled AppImage script are gone. Tauri's bundler produces the
+AppImage (linuxdeploy under the hood, WebKitGTK bundled), the deb and the rpm itself
+(`pnpm tauri build`, see `release.yml`, one native job per arch on ubuntu-22.04); Nix
+builds it with nixpkgs' `cargo-tauri.hook` plus `fetchPnpmDeps` for the frontend. Sections
+4 and 5 above describe the Fyne-era plan and are kept for their primary-source references.
+
+AUR stays CLI-only (`bnm-bin`, goreleaser). A `bnm-desktop-bin` PKGBUILD can follow later,
+repackaging the release's `bnm-desktop_<ver>_amd64.deb` with `depends=(bnm-bin webkit2gtk-4.1
+gtk3 libayatana-appindicator)`; either a second `aurs:` entry (goreleaser only knows its own
+builds, so it would need the deb as an `extra_files` download) or a hand-maintained PKGBUILD,
+gated on the same `AUR_KEY` secret.

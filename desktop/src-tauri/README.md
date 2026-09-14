@@ -169,5 +169,10 @@ hashes, which would silently disable `'unsafe-inline'`.
 `libnotify4`; rpm depends on `NetworkManager` and recommends `libnotify`. The desktop
 entry template is `bnm-desktop.desktop.hbs` (installed as `bnm-desktop.desktop` because
 `mainBinaryName` is `bnm-desktop`; categories `Network;Settings;`). The package name
-follows `productName` (`bnm`); mind the collision with the nfpm `bnm` package that
-ships the CLI and daemon if both are ever published to the same repository.
+follows `productName` (`bnm-desktop`), so it never collides with the nfpm `bnm` package
+that ships the CLI and daemon: `bnm-desktop_<ver>_<arch>.deb`, `bnm-desktop-<ver>-1.<arch>.rpm`,
+`bnm-desktop_<ver>_<arch>.AppImage`. The version lives in `Cargo.toml` only (`tauri.conf.json`
+has no `version` key, so Tauri falls back to it); it stays `0.1.0` in git and the release
+workflow rewrites it from the tag before building. `make desktop` and `make desktop-bundle` at the
+repo root wrap `pnpm tauri build`; the Nix package (`nix build .#bnm-desktop`) uses nixpkgs'
+`cargo-tauri.hook`, which builds the deb and installs its `usr/` tree.

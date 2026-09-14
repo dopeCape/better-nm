@@ -4,7 +4,7 @@ A NetworkManager front end that doesn't suck. One unprivileged daemon, three sur
 
 - **`bnm`**: a CLI with a full command tree and `--json` everywhere.
 - **`bnm`** with no arguments: a terminal UI that refreshes live (the nmtui you wanted).
-- **`bnm-desktop`**: a desktop app (Fyne, Wayland and X11) with an optional tray icon.
+- **`bnm-desktop`**: a desktop app (Tauri 2: Rust shell + React, WebKitGTK; Wayland and X11) with an optional tray icon.
 
 What it does that nmcli and nmtui don't:
 
@@ -18,17 +18,32 @@ Everything runs as your user: NetworkManager over D-Bus with polkit, Tailscale t
 
 ## Install
 
-Prebuilt packages (deb, rpm, Arch, static tarballs, AppImage for the desktop app) are on the [releases page](https://github.com/dopeCape/better-nm/releases). AUR: `bnm-bin`.
+Prebuilt packages are on the [releases page](https://github.com/dopeCape/better-nm/releases):
+`bnm` (CLI + daemon) as deb, rpm, Arch package and static tarballs, and `bnm-desktop` as
+AppImage, deb and rpm for x86_64 and aarch64. AUR: `bnm-bin`. The desktop packages depend
+on the `bnm` package for the daemon (the AppImage finds `bnmd` on `PATH` or next to itself).
 
-From source (Go 1.25):
+From source, CLI and daemon (Go 1.25):
 
 ```
 make build            # bin/bnm, bin/bnmd
-make desktop          # bin/bnm-desktop (needs cgo + GL/X11/Wayland headers; on NixOS: nix develop)
-make install          # copies to ~/.local/bin and adds the launcher entry
+make install          # copies to ~/.local/bin (plus bin/bnm-desktop and its launcher entry if built)
 ```
 
-Nix: `nix run github:dopeCape/better-nm`, or add the flake and enable `services.bnm` (NixOS module and Home Manager module are both exported).
+The desktop app is Tauri 2: a Rust shell over a React frontend. It needs rustc/cargo,
+node 24, pnpm, and the WebKitGTK 4.1, GTK 3, libayatana-appindicator, librsvg and
+libsoup 3 development libraries (`apt install libwebkit2gtk-4.1-dev libgtk-3-dev
+libayatana-appindicator3-dev librsvg2-dev libsoup-3.0-dev`; on NixOS everything is in
+`nix develop`):
+
+```
+make desktop          # bin/bnm-desktop
+make desktop-bundle   # AppImage, deb and rpm under desktop/src-tauri/target/release/bundle/
+```
+
+Nix: `nix run github:dopeCape/better-nm` for the CLI, `nix build github:dopeCape/better-nm#bnm-desktop`
+for the desktop app, or add the flake and enable `services.bnm` (with `services.bnm.desktop = true`
+for the app; NixOS module and Home Manager module are both exported).
 
 Run `bnm daemon install` once to run the daemon as a systemd user service. Without it, `bnm` starts the daemon on demand and it keeps collecting baselines in the background.
 
@@ -62,7 +77,7 @@ Those distros ship without unprivileged ping sockets. The deb installs `/usr/lib
 
 ## How it is built
 
-Go throughout. `internal/core` is the domain model (see `CONTEXT.md` for the vocabulary); `internal/nm` talks D-Bus to NetworkManager directly; `internal/vpn/*` are the backend adapters; `internal/monitor` is the probe engine; `internal/daemon` + `internal/api` expose HTTP/JSON over a Unix socket that `internal/client` wraps for the CLI, TUI and desktop app. `docs/API.md` lists the routes. Design decisions and the research behind them live in this repo's issues (the wayfinder map, #1) and `docs/research/`.
+Go for the daemon, CLI and TUI; Rust and TypeScript for the desktop app. `internal/core` is the domain model (see `CONTEXT.md` for the vocabulary); `internal/nm` talks D-Bus to NetworkManager directly; `internal/vpn/*` are the backend adapters; `internal/monitor` is the probe engine; `internal/daemon` + `internal/api` expose HTTP/JSON over a Unix socket that `internal/client` wraps for the CLI, TUI and desktop app. `docs/API.md` lists the routes. `desktop/` holds the Tauri app: `desktop/src-tauri` is the Rust shell (socket, tray, config file), `desktop/src` the React frontend, `desktop/CONTRACT.md` the boundary between them. Design decisions and the research behind them live in this repo's issues (the wayfinder map, #1) and `docs/research/`.
 
 Tests: `make test-race` (unit, no network), `make test-integration` (python-dbusmock NetworkManager), and `go test -tags live ./...` for read-only checks against the machine you are on.
 

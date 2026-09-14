@@ -7,5 +7,6 @@ Exec=bnm-desktop
 Icon=bnm
 Terminal=false
 Categories=Network;Settings;System;
+StartupWMClass=bnm
 Keywords=network;wifi;vpn;tailscale;wireguard;speed;
 StartupNotify=true
