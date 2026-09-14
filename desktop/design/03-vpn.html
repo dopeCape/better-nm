@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>bnm · VPN</title>
+<link rel="stylesheet" href="tokens.css">
+<link id="preset" rel="stylesheet" href="presets/dark.css">
+<link rel="stylesheet" href="base.css">
+<style>
+
+.vpn-row { grid-template-columns: 16px minmax(0,1fr) auto; }
+.vpn-add { grid-template-columns: 16px minmax(0,1fr) auto; color: var(--subtext); }
+.vpn-add .ic { color: var(--muted); }
+.vpn-add:hover { color: var(--text); }
+.peer-row { grid-template-columns: 16px minmax(0,1fr) 110px 8px; }
+.cmd { display: flex; align-items: center; gap: 6px; }
+.cmd code { font-size: var(--fs-sm); padding: 3px 8px; background: var(--surface); border: var(--hairline) solid var(--border); border-radius: var(--r); color: var(--text); }
+.switch-row { padding: 6px 0; }
+.switch-row + .switch-row { border-top: var(--hairline) solid var(--border); }
+
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="rail">
+    <div class="wordmark"><span class="mark"><svg class="ic"><use href="#ph-broadcast"/></svg></span>bnm</div>
+    <nav class="nav" aria-label="Sections">
+        <a class="nav-item" href="01-overview.html"><svg class="ic"><use href="#ph-house"/></svg><span>Overview</span><kbd>1</kbd></a>
+        <a class="nav-item" href="02-wifi.html"><svg class="ic"><use href="#ph-wifi-high"/></svg><span>Wi-Fi</span><kbd>2</kbd></a>
+        <a class="nav-item" href="03-vpn.html" aria-current="page"><svg class="ic"><use href="#ph-shield-check"/></svg><span>VPN</span><kbd>3</kbd></a>
+        <a class="nav-item" href="04-quality.html"><svg class="ic"><use href="#ph-pulse"/></svg><span>Quality</span><kbd>4</kbd></a>
+        <a class="nav-item" href="05-speed.html"><svg class="ic"><use href="#ph-gauge"/></svg><span>Speed</span><kbd>5</kbd></a>
+        <a class="nav-item" href="#"><svg class="ic"><use href="#ph-network"/></svg><span>Devices</span><kbd>6</kbd></a>
+        <a class="nav-item" href="07-settings.html"><svg class="ic"><use href="#ph-gear-six"/></svg><span>Settings</span><kbd>7</kbd></a>
+    </nav>
+    <div class="rail-spacer"></div>
+    <div class="conn-pill" title="Connected to ALHN-F832-5">
+      <span class="dot ok"></span>
+      <span class="name">ALHN-F832-5</span>
+      <span class="meta"><span class="mono">192.168.1.73</span><svg class="ic tone-vpn"><use href="#ph-shield-check"/></svg></span>
+    </div>
+  </aside>
+  <div class="main">
+    <header class="top">
+      <div class="crumb">
+        <svg class="ic tone-wifi"><use href="#ph-wifi-high"/></svg>
+        <span class="name">ALHN-F832-5</span>
+        <span class="ip mono">192.168.1.73/24</span>
+      </div>
+      <span class="sep"></span>
+      <span class="status"><span class="dot ok"></span>Internet</span>
+      <span class="sep"></span>
+      <span class="status"><span class="badge warn"><svg class="ic"><use href="#ph-spinner-gap"/></svg>Learning 12/40</span></span>
+      <div class="right">
+        <button class="search-btn" type="button"><svg class="ic"><use href="#ph-magnifying-glass"/></svg><span>Search or run a command</span><span class="keys"><kbd>Ctrl</kbd><kbd>K</kbd></span></button>
+      </div>
+    </header>
+    <main class="content">
+      <div class="content-inner">
+
+<div class="page-head">
+  <div><h1 class="h1">VPN</h1><p>One switch per tunnel, whatever runs it.</p></div>
+  <div class="actions"><button class="btn" type="button"><svg class="ic"><use href="#ph-file-arrow-up"/></svg>Add from file</button></div>
+</div>
+<div class="list" id="vpn-list">
+  <div class="row two vpn-row" id="row-ts">
+    <svg class="ic tone-vpn"><use href="#ph-shield-check-fill"/></svg>
+    <div><div class="primary">Tailscale <span class="tag">Tailscale</span></div>
+      <div class="secondary"><span class="mono">100.101.3.42</span> · up since <span class="mono">14:31</span>, no exit node</div></div>
+    <div class="trail"><span class="badge ok">Connected</span><button class="switch" role="switch" aria-checked="true" aria-label="Tailscale"></button></div>
+  </div>
+  <div class="row two vpn-row hidden" id="row-ts-setup">
+    <svg class="ic tone-warn"><use href="#ph-shield-warning"/></svg>
+    <div><div class="primary">Tailscale <span class="tag">Tailscale</span></div>
+      <div class="secondary">Installed, but bnm may not drive it yet</div></div>
+    <div class="trail"><span class="badge warn">Needs setup</span><button class="switch" role="switch" aria-checked="false" aria-disabled="true" aria-label="Tailscale"></button></div>
+  </div>
+  <div class="row two vpn-row">
+    <svg class="ic lead"><use href="#ph-shield-check"/></svg>
+    <div><div class="primary">tejas <span class="tag">OpenVPN</span></div>
+      <div class="secondary"><span class="mono">vpn.tj.house:1194</span> · asks for a password</div></div>
+    <div class="trail"><span class="badge">Off</span><button class="switch" role="switch" aria-checked="false" aria-label="tejas"></button></div>
+  </div>
+  <div class="row two vpn-row">
+    <svg class="ic lead"><use href="#ph-shield-check"/></svg>
+    <div><div class="primary">wg-home <span class="tag">WireGuard</span></div>
+      <div class="secondary"><span class="mono">wg0</span> · last handshake <span class="mono">3 d</span> ago</div></div>
+    <div class="trail"><span class="badge">Off</span><button class="switch" role="switch" aria-checked="false" aria-label="wg-home"></button></div>
+  </div>
+  <button class="row vpn-add" type="button"><svg class="ic"><use href="#ph-plus"/></svg><span class="sub">Add a <span class="mono">.ovpn</span> or WireGuard <span class="mono">.conf</span> from a file</span><span class="trail"><span class="keys"><kbd>A</kbd></span></span></button>
+</div>
+
+<section class="section" id="ts-section">
+  <div class="section-head"><h2 class="h3">Tailscale</h2>
+    <div class="actions"><span class="sub sm">tailnet <span class="mono">tejas.github</span></span><button class="btn btn-ghost" type="button"><svg class="ic"><use href="#ph-sign-out"/></svg>Log out</button></div></div>
+  <div class="banner warn hidden mb-4" id="ts-setup-banner"><svg class="ic"><use href="#ph-shield-warning-fill"/></svg>
+    <div><div class="t">Tailscale needs setup</div><div class="d">Let your user drive tailscaled without sudo, once:</div>
+      <div class="cmd mt-2"><code>sudo tailscale set --operator=$USER</code><button class="btn btn-ghost btn-icon" type="button" title="Copy"><svg class="ic"><use href="#ph-copy"/></svg></button></div></div>
+    <div class="actions"><button class="btn" type="button"><svg class="ic"><use href="#ph-arrows-clockwise"/></svg>Check again</button></div>
+  </div>
+  <div class="cols cols-1-1">
+    <div>
+      <dl class="kv tight">
+        <dt>This machine</dt><dd><span class="mono">nixos-baby</span><span class="sub">linux</span></dd>
+        <dt>Tailscale IP</dt><dd><span class="mono">100.101.3.42</span><button class="btn btn-ghost btn-icon" title="Copy"><svg class="ic"><use href="#ph-copy"/></svg></button></dd>
+        <dt>MagicDNS</dt><dd><span class="mono">nixos-baby.tail4c2e1.ts.net</span></dd>
+        <dt>Version</dt><dd><span class="mono">1.88.1</span></dd>
+      </dl>
+      <div class="section" style="margin-top:var(--s-4);padding-top:var(--s-4)">
+        <div class="section-head"><h3 class="h3">Peers</h3><span class="sub sm">2 online</span></div>
+        <div class="list">
+          <div class="row peer-row"><svg class="ic lead"><use href="#ph-laptop"/></svg><span class="primary">hetzner-1 <span class="tag">exit node</span></span><span class="secondary mono">100.64.0.7</span><span class="dot ok" title="online"></span></div>
+          <div class="row peer-row"><svg class="ic lead"><use href="#ph-device-mobile"/></svg><span class="primary">pixel-9a</span><span class="secondary mono">100.83.12.4</span><span class="dot ok" title="online"></span></div>
+          <div class="row peer-row"><svg class="ic lead"><use href="#ph-desktop"/></svg><span class="primary">studio</span><span class="secondary mono">100.71.9.20</span><span class="dot" title="offline, last seen 2 d"></span></div>
+        </div>
+      </div>
+    </div>
+    <div>
+      <div class="field">
+        <label for="exit">Exit node</label>
+        <div class="select-wrap"><select id="exit" class="select"><option>None (direct)</option><option>hetzner-1 · Falkenstein</option></select><svg class="ic"><use href="#ph-caret-up-down"/></svg></div>
+        <span class="help">Route all traffic through a peer that offers it.</span>
+      </div>
+      <div class="list mt-4">
+        <label class="switch-row"><span class="label">Allow LAN access<span class="hint">Keep talking to printers and NAS while an exit node is on</span></span><button class="switch" role="switch" aria-checked="true"></button></label>
+        <label class="switch-row"><span class="label">Accept DNS<span class="hint">Use MagicDNS and the tailnet's nameservers</span></span><button class="switch" role="switch" aria-checked="true"></button></label>
+        <label class="switch-row"><span class="label">Start on login<span class="hint">tailscaled brings the tunnel up at boot</span></span><button class="switch" role="switch" aria-checked="true"></button></label>
+      </div>
+      <div class="flex mt-4"><button class="btn" type="button"><svg class="ic"><use href="#ph-arrow-square-out"/></svg>Open admin console</button><button class="btn btn-ghost" type="button"><svg class="ic"><use href="#ph-sign-in"/></svg>Log in again</button></div>
+    </div>
+  </div>
+</section>
+
+      </div>
+    </main>
+  </div>
+</div>
+
+<script src="icons/sprite.js"></script>
+<script src="theme-switcher.js"></script>
+<script>
+
+(function(){
+  var st = new URLSearchParams(location.search).get('state');
+  if (st === 'needs-setup') {
+    document.getElementById('row-ts').classList.add('hidden');
+    document.getElementById('row-ts-setup').classList.remove('hidden');
+    document.getElementById('ts-setup-banner').classList.remove('hidden');
+  }
+})();
+
+</script>
+</body>
+</html>

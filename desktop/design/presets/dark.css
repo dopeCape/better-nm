@@ -1,0 +1,23 @@
+/* bnm Dark (default)
+   scheme: dark
+   bnm's own neutral palette: cool off-black, one steel-teal accent.
+   16 tokens; edit here or generate from a Base16 scheme (DESIGN.md). */
+:root {
+  color-scheme: dark;
+  --base: #141517;
+  --mantle: #0f1012;
+  --surface: #1c1e21;
+  --overlay: #1f2124;
+  --text: #e7e9ec;
+  --subtext: #a0a5ad;
+  --muted: #737880;
+  --accent: #5fa8c8;
+  --accent-text: #0b1215;
+  --ok: #52b788;
+  --warn: #e3b341;
+  --error: #e5695f;
+  --vpn: #e08a4f;
+  --wifi: #6db7d6;
+  --border: #26292d;
+  --selection: #5fa8c826;
+}

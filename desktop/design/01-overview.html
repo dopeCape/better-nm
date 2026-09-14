@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>bnm · Overview</title>
+<link rel="stylesheet" href="tokens.css">
+<link id="preset" rel="stylesheet" href="presets/dark.css">
+<link rel="stylesheet" href="base.css">
+<style>
+
+.vpn-row { grid-template-columns: 16px minmax(0,1fr) auto; }
+.events li { display: grid; grid-template-columns: 16px minmax(0,1fr) auto; gap: 10px; align-items: start; padding: 8px 0; }
+.events li + li { border-top: var(--hairline) solid var(--border); }
+.events li .ic { margin-top: 2px; }
+
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="rail">
+    <div class="wordmark"><span class="mark"><svg class="ic"><use href="#ph-broadcast"/></svg></span>bnm</div>
+    <nav class="nav" aria-label="Sections">
+        <a class="nav-item" href="01-overview.html" aria-current="page"><svg class="ic"><use href="#ph-house"/></svg><span>Overview</span><kbd>1</kbd></a>
+        <a class="nav-item" href="02-wifi.html"><svg class="ic"><use href="#ph-wifi-high"/></svg><span>Wi-Fi</span><kbd>2</kbd></a>
+        <a class="nav-item" href="03-vpn.html"><svg class="ic"><use href="#ph-shield-check"/></svg><span>VPN</span><kbd>3</kbd></a>
+        <a class="nav-item" href="04-quality.html"><svg class="ic"><use href="#ph-pulse"/></svg><span>Quality</span><kbd>4</kbd></a>
+        <a class="nav-item" href="05-speed.html"><svg class="ic"><use href="#ph-gauge"/></svg><span>Speed</span><kbd>5</kbd></a>
+        <a class="nav-item" href="#"><svg class="ic"><use href="#ph-network"/></svg><span>Devices</span><kbd>6</kbd></a>
+        <a class="nav-item" href="07-settings.html"><svg class="ic"><use href="#ph-gear-six"/></svg><span>Settings</span><kbd>7</kbd></a>
+    </nav>
+    <div class="rail-spacer"></div>
+    <div class="conn-pill" title="Connected to ALHN-F832-5">
+      <span class="dot ok"></span>
+      <span class="name">ALHN-F832-5</span>
+      <span class="meta"><span class="mono">192.168.1.73</span><svg class="ic tone-vpn"><use href="#ph-shield-check"/></svg></span>
+    </div>
+  </aside>
+  <div class="main">
+    <header class="top">
+      <div class="crumb">
+        <svg class="ic tone-wifi"><use href="#ph-wifi-high"/></svg>
+        <span class="name">ALHN-F832-5</span>
+        <span class="ip mono">192.168.1.73/24</span>
+      </div>
+      <span class="sep"></span>
+      <span class="status"><span class="dot ok"></span>Internet</span>
+      <span class="sep"></span>
+      <span class="status"><span class="badge warn"><svg class="ic"><use href="#ph-spinner-gap"/></svg>Learning 12/40</span></span>
+      <div class="right">
+        <button class="search-btn" type="button"><svg class="ic"><use href="#ph-magnifying-glass"/></svg><span>Search or run a command</span><span class="keys"><kbd>Ctrl</kbd><kbd>K</kbd></span></button>
+      </div>
+    </header>
+    <main class="content">
+      <div class="content-inner">
+
+<div class="page-head">
+  <div><h1 class="h1">Overview</h1><p>Home, on Wi-Fi. Tailscale is up.</p></div>
+</div>
+<div class="cols cols-3-2">
+  <div>
+    <section class="section flush">
+      <div class="section-head"><h2 class="h3">Connection</h2>
+        <div class="actions"><a class="btn btn-ghost" href="02-wifi.html">Wi-Fi details <svg class="ic"><use href="#ph-arrow-right"/></svg></a></div></div>
+      <dl class="kv">
+        <dt>Network</dt><dd>ALHN-F832-5 <span class="tag">WPA2</span></dd>
+        <dt>Device</dt><dd><span class="mono">wlan0</span><span class="sub">Intel AX211</span></dd>
+        <dt>IPv4</dt><dd><span class="mono">192.168.1.73/24</span><button class="btn btn-ghost btn-icon" title="Copy"><svg class="ic"><use href="#ph-copy"/></svg></button></dd>
+        <dt>Gateway</dt><dd><span class="mono">192.168.1.254</span></dd>
+        <dt>DNS</dt><dd><span class="mono">192.168.1.254</span></dd>
+        <dt>Signal</dt><dd><span class="sig" data-level="3"><i></i><i></i><i></i><i></i></span><span class="mono">74%</span><span class="sub">5 GHz, channel <span class="mono">161</span></span></dd>
+        <dt>Link</dt><dd><span class="mono">866 Mbit/s</span></dd>
+      </dl>
+    </section>
+    <section class="section">
+      <div class="section-head"><h2 class="h3">VPN</h2>
+        <div class="actions"><a class="btn btn-ghost" href="03-vpn.html">Manage <svg class="ic"><use href="#ph-arrow-right"/></svg></a></div></div>
+      <div class="list">
+        <div class="row two vpn-row">
+          <svg class="ic tone-vpn"><use href="#ph-shield-check-fill"/></svg>
+          <div><div class="primary">Tailscale <span class="tag">Tailscale</span></div>
+            <div class="secondary"><span class="mono">100.101.3.42</span> · up since <span class="mono">14:31</span></div></div>
+          <div class="trail"><span class="badge ok">Connected</span><button class="switch" role="switch" aria-checked="true" aria-label="Tailscale"></button></div>
+        </div>
+        <div class="row two vpn-row">
+          <svg class="ic lead"><use href="#ph-shield-check"/></svg>
+          <div><div class="primary">tejas <span class="tag">OpenVPN</span></div>
+            <div class="secondary"><span class="mono">vpn.tj.house:1194</span></div></div>
+          <div class="trail"><span class="badge">Off</span><button class="switch" role="switch" aria-checked="false" aria-label="tejas"></button></div>
+        </div>
+      </div>
+    </section>
+  </div>
+  <div>
+    <section class="section flush">
+      <div class="section-head"><h2 class="h3">Quality</h2>
+        <div class="actions"><span class="badge warn"><svg class="ic"><use href="#ph-spinner-gap"/></svg>Learning 12/40</span></div></div>
+      <div class="stats mb-3">
+        <div class="stat"><span class="v">1.4<small>ms</small></span><span class="k">gateway</span></div>
+        <div class="stat"><span class="v">11.2<small>ms</small></span><span class="k">1.1.1.1</span></div>
+        <div class="stat"><span class="v">14<small>ms</small></span><span class="k">DNS</span></div>
+      </div>
+      <div class="chart" id="ov-chart"></div>
+      <div class="chart-legend mt-2"><span><i></i>1.1.1.1 round-trip</span><span><i class="band"></i>baseline so far</span></div>
+    </section>
+    <section class="section">
+      <div class="section-head"><h2 class="h3">Recent events</h2></div>
+      <ol class="events">
+        <li><svg class="ic tone-vpn"><use href="#ph-shield-check"/></svg><div><div>Tailscale connected</div><div class="sub sm">2 peers online</div></div><span class="mono sub sm">14:31</span></li>
+        <li><svg class="ic tone-wifi"><use href="#ph-wifi-high"/></svg><div><div>Connected to ALHN-F832-5</div><div class="sub sm"><span class="mono">192.168.1.73</span> via wlan0</div></div><span class="mono sub sm">14:31</span></li>
+        <li><svg class="ic tone-ok"><use href="#ph-check-circle"/></svg><div><div>Internet restored</div></div><span class="mono sub sm">09:12</span></li>
+        <li><svg class="ic tone-warn"><use href="#ph-warning-circle"/></svg><div><div>No internet on ALHN-F832-5</div><div class="sub sm">Connectivity limited for 10 s</div></div><span class="mono sub sm">09:11</span></li>
+        <li><svg class="ic tone-ok"><use href="#ph-pulse"/></svg><div><div>Recovered</div><div class="sub sm">Round-trip back within baseline</div></div><span class="mono sub sm">Yesterday</span></li>
+      </ol>
+    </section>
+  </div>
+</div>
+
+      </div>
+    </main>
+  </div>
+</div>
+
+<script src="icons/sprite.js"></script>
+<script src="theme-switcher.js"></script>
+<script>
+
+// Sparkline / quality chart builder. data: array of rtt ms (-1 = loss). base: baseline rtt. tol: band half-width.
+function chart(el, opts) {
+  var data = opts.data, W = opts.w || 400, H = opts.h || 120, padL = opts.axis ? 34 : 0, padB = opts.axis ? 16 : 0, padT = 6;
+  var max = Math.max.apply(null, data.filter(function (v) { return v >= 0; }).concat([opts.base + opts.tol]));
+  var ymax = opts.ymax || Math.ceil(max * 1.15);
+  var iw = W - padL, ih = H - padB - padT;
+  var x = function (i) { return padL + i / (data.length - 1) * iw; };
+  var y = function (v) { return padT + ih - (v / ymax) * ih; };
+  var ns = "http://www.w3.org/2000/svg";
+  var svg = document.createElementNS(ns, "svg"); svg.setAttribute("viewBox", "0 0 " + W + " " + H); svg.setAttribute("height", H);
+  function mk(t, a, parent) { var e = document.createElementNS(ns, t); for (var k in a) e.setAttribute(k, a[k]); (parent || svg).appendChild(e); return e; }
+  // grid: 3 hairlines
+  var g = mk("g", { "class": "grid" });
+  [0, 0.5, 1].forEach(function (f) { var yy = Math.round(padT + ih * f) + 0.5; mk("line", { x1: padL, x2: W, y1: yy, y2: yy }, g); });
+  // baseline band drawn behind the line
+  var top = y(opts.base + opts.tol), bot = y(Math.max(0, opts.base - opts.tol));
+  mk("rect", { "class": "band", x: padL, y: top, width: iw, height: bot - top });
+  var by = Math.round(y(opts.base)) + 0.5; mk("line", { "class": "band-mid", x1: padL, x2: W, y1: by, y2: by });
+  // line (gaps where lost)
+  var d = "", pen = false;
+  data.forEach(function (v, i) { if (v < 0) { pen = false; return; } d += (pen ? "L" : "M") + x(i).toFixed(1) + " " + y(v).toFixed(1); pen = true; });
+  var path = mk("path", { "class": "line " + (opts.tone || ""), d: d });
+  // loss ticks at the bottom
+  data.forEach(function (v, i) { if (v < 0) mk("rect", { "class": "loss", x: x(i) - 1.5, y: padT + ih - 6, width: 3, height: 6 }); });
+  // end marker
+  var last = data.length - 1; while (data[last] < 0) last--;
+  mk("circle", { "class": "end", cx: x(last), cy: y(data[last]), r: 3 });
+  if (opts.axis) {
+    var ax = mk("g", { "class": "axis" });
+    [0, 0.5, 1].forEach(function (f) { var t = mk("text", { x: padL - 6, y: padT + ih * (1 - f) + 3, "text-anchor": "end" }, ax); t.textContent = (ymax * f).toFixed(ymax < 5 ? 1 : 0); });
+    var t0 = mk("text", { x: padL, y: H - 2 }, ax); t0.textContent = opts.from || "-30 min";
+    var t1 = mk("text", { x: W, y: H - 2, "text-anchor": "end" }, ax); t1.textContent = "now";
+  }
+  el.appendChild(svg);
+  // Draw-in: measure first, then add the class so the animation starts with the right length;
+  // drop the class when done so the settled state is a plain stroke.
+  var motionOff = document.documentElement.dataset.motion === "0" || matchMedia("(prefers-reduced-motion: reduce)").matches;
+  if (opts.draw !== false && !motionOff) {
+    path.style.setProperty("--len", path.getTotalLength().toFixed(0));
+    path.classList.add("draw");
+    path.addEventListener("animationend", function () { path.classList.remove("draw"); path.style.removeProperty("--len"); }, { once: true });
+  }
+}
+// deterministic noise
+function series(n, base, jitter, seed, spikes) {
+  var s = seed || 1, out = [];
+  function rnd() { s = (s * 16807) % 2147483647; return (s - 1) / 2147483646; }
+  for (var i = 0; i < n; i++) { var v = base + (rnd() - 0.5) * 2 * jitter; if (spikes && spikes[i] !== undefined) v = spikes[i]; out.push(Math.round(v * 100) / 100); }
+  return out;
+}
+
+chart(document.getElementById('ov-chart'), { data: series(48, 10.4, 1.6, 7, {31: 17.4, 32: 14.1, 40: -1}), base: 9.8, tol: 2.4, w: 340, h: 104, ymax: 20 });
+
+</script>
+</body>
+</html>

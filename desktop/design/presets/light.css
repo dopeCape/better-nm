@@ -1,0 +1,23 @@
+/* bnm Light
+   scheme: light
+   bnm's own neutral light palette.
+   16 tokens; edit here or generate from a Base16 scheme (DESIGN.md). */
+:root {
+  color-scheme: light;
+  --base: #f7f7f8;
+  --mantle: #efeff1;
+  --surface: #e8e8eb;
+  --overlay: #ffffff;
+  --text: #1b1c1f;
+  --subtext: #5c6068;
+  --muted: #767b84;
+  --accent: #2b7fa6;
+  --accent-text: #ffffff;
+  --ok: #2e8b57;
+  --warn: #b7791f;
+  --error: #c8433b;
+  --vpn: #c2652a;
+  --wifi: #2a8fbd;
+  --border: #dcdde1;
+  --selection: #2b7fa622;
+}

@@ -1,0 +1,23 @@
+/* One Dark
+   scheme: dark
+   https://github.com/atom/atom/tree/master/packages/one-dark-ui
+   16 tokens; edit here or generate from a Base16 scheme (DESIGN.md). */
+:root {
+  color-scheme: dark;
+  --base: #282c34;
+  --mantle: #21252b;
+  --surface: #2c313a;
+  --overlay: #2f343d;
+  --text: #c8ccd4;
+  --subtext: #9da5b4;
+  --muted: #5c6370;
+  --accent: #61afef;
+  --accent-text: #282c34;
+  --ok: #98c379;
+  --warn: #e5c07b;
+  --error: #e06c75;
+  --vpn: #d19a66;
+  --wifi: #56b6c2;
+  --border: #3a3f4b;
+  --selection: #61afef26;
+}

@@ -1,0 +1,142 @@
+/* bnm desktop design tokens
+   ------------------------------------------------------------------
+   Everything that is a colour lives in a preset (presets/*.css) and is
+   consumed here by name. Nothing below hard-codes a colour. A YAML
+   theme is one flat map of the 16 colour tokens; see DESIGN.md for the
+   token table and the Base16 mapping.
+
+   Colour tokens (set by the preset):
+     --base        window / content background
+     --mantle      rail and top strip (one step below base)
+     --surface     inputs, hover rows, kbd, chips
+     --overlay     dialogs, palette, popovers (one step above base)
+     --text        primary text
+     --subtext     secondary text, labels
+     --muted       tertiary: placeholders, disabled, axis ticks
+     --accent      the one accent: focus, active nav, switches, live line
+     --accent-text text on an accent background
+     --ok --warn --error   state colours
+     --vpn --wifi          identity colours for the two things bnm toggles
+     --border      hairlines
+     --selection   selected-row background (accent at low alpha)
+*/
+
+/* ---------- Fonts (vendored, OFL) ---------- */
+@font-face {
+  font-family: "Geist";
+  src: url("fonts/Geist-Variable.woff2") format("woff2");
+  font-weight: 100 900;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Inter";
+  src: url("fonts/InterVariable.woff2") format("woff2");
+  font-weight: 100 900;
+  font-display: swap;
+}
+@font-face {
+  font-family: "JetBrains Mono";
+  src: url("fonts/JetBrainsMono-Variable.woff2") format("woff2");
+  font-weight: 100 800;
+  font-display: swap;
+}
+
+:root {
+  /* ---------- Type ---------- */
+  --font-ui: "Geist", "Inter", "Inter Variable", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono", "JetBrainsMono Nerd Font", "JetBrainsMonoNL Nerd Font", ui-monospace, "Cascadia Mono", monospace;
+
+  --fs-xs: 11px;   /* kbd, tiny meta */
+  --fs-sm: 12px;   /* secondary, table meta, badges */
+  --fs-md: 13px;   /* body */
+  --fs-lg: 14px;   /* row titles, inputs */
+  --fs-xl: 16px;   /* section headings */
+  --fs-2xl: 20px;  /* page titles, dialog titles */
+  --fs-3xl: 28px;  /* key figure */
+  --fs-display: 56px; /* speed test counter */
+
+  --lh-tight: 1.2;
+  --lh: 1.45;
+
+  --fw-regular: 430;  /* variable fonts: a touch above 400 for dark surfaces */
+  --fw-medium: 520;
+  --fw-semibold: 600;
+
+
+  /* ---------- Spacing (4 px grid) ---------- */
+  --s-1: 4px;
+  --s-2: 8px;
+  --s-3: 12px;
+  --s-4: 16px;
+  --s-5: 20px;
+  --s-6: 24px;
+  --s-8: 32px;
+  --s-10: 40px;
+  --s-12: 48px;
+  --s-16: 64px;
+
+  /* ---------- Shape ---------- */
+  --r: 4px;          /* the only radius. Buttons, inputs, rows, dialogs, switches. */
+  --hairline: 1px;
+
+  /* ---------- Layout ---------- */
+  --rail-w: 212px;
+  --top-h: 44px;
+  --gutter: 24px;
+  --content-max: 1040px;
+  --row-h: 36px;
+  --control-h: 28px;   /* buttons, inputs, selects */
+  --control-h-lg: 32px;
+  --icon: 16px;
+  --icon-lg: 20px;
+
+  /* ---------- Motion ---------- */
+  --t-fast: 120ms;   /* hover, focus, state colour */
+  --t-med: 200ms;    /* switches, dialogs, rows entering */
+  --t-draw: 600ms;   /* sparkline draw-in */
+  --ease: cubic-bezier(0.2, 0, 0, 1);
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+
+  /* ---------- Focus ---------- */
+  --focus-ring: 0 0 0 2px var(--base), 0 0 0 4px var(--accent);
+
+  /* ---------- Z layers ---------- */
+  --z-rail: 10;
+  --z-top: 20;
+  --z-toast: 40;
+  --z-scrim: 50;
+  --z-dialog: 60;
+  --z-tooltip: 70;
+}
+
+/* Density: compact is what a 1120x720 window on a laptop wants. */
+:root[data-density="compact"] {
+  --fs-md: 12px;
+  --fs-lg: 13px;
+  --row-h: 30px;
+  --control-h: 26px;
+  --gutter: 20px;
+  --s-6: 20px;
+}
+:root[data-density="comfortable"] {
+  --row-h: 40px;
+  --control-h: 30px;
+}
+
+/* Font choice from settings: system falls back to what the desktop has. */
+:root[data-font="inter"] { --font-ui: "Inter", "Inter Variable", system-ui, sans-serif; }
+:root[data-font="system"] { --font-ui: system-ui, -apple-system, "Segoe UI", "Noto Sans", sans-serif; }
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --t-fast: 0ms;
+    --t-med: 0ms;
+    --t-draw: 0ms;
+  }
+}
+/* data-motion="0": the settings toggle "reduce motion" and the screenshot renderer. */
+:root[data-motion="0"] {
+  --t-fast: 0ms;
+  --t-med: 0ms;
+  --t-draw: 0ms;
+}

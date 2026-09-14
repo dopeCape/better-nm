@@ -1,0 +1,23 @@
+/* Tokyo Night
+   scheme: dark
+   https://github.com/enkia/tokyo-night-vscode-theme
+   16 tokens; edit here or generate from a Base16 scheme (DESIGN.md). */
+:root {
+  color-scheme: dark;
+  --base: #1a1b26;
+  --mantle: #16161e;
+  --surface: #24283b;
+  --overlay: #1f2335;
+  --text: #c0caf5;
+  --subtext: #a9b1d6;
+  --muted: #565f89;
+  --accent: #7aa2f7;
+  --accent-text: #1a1b26;
+  --ok: #9ece6a;
+  --warn: #e0af68;
+  --error: #f7768e;
+  --vpn: #ff9e64;
+  --wifi: #7dcfff;
+  --border: #292e42;
+  --selection: #7aa2f726;
+}

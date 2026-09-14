@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>bnm · Speed</title>
+<link rel="stylesheet" href="tokens.css">
+<link id="preset" rel="stylesheet" href="presets/dark.css">
+<link rel="stylesheet" href="base.css">
+<style>
+
+.hero { border-top: var(--hairline) solid var(--border); border-bottom: var(--hairline) solid var(--border); padding: var(--s-10) 0; min-height: 260px; display: grid; align-items: center; }
+.hero-empty, .hero-run { display: flex; flex-direction: column; align-items: center; text-align: center; }
+.hero-empty p { max-width: 42ch; }
+.counter { display: flex; align-items: baseline; gap: 10px; margin: var(--s-2) 0 var(--s-5); }
+.counter .mono { font-size: var(--fs-display); font-weight: 500; letter-spacing: -0.02em; line-height: 1; min-width: 3.2ch; text-align: right; }
+.counter .unit { color: var(--subtext); font-size: var(--fs-lg); }
+.phase-label { display: flex; align-items: center; gap: 8px; }
+.dot.accent { background: var(--accent); }
+.phases { display: flex; justify-content: space-between; width: 320px; margin-top: 8px; }
+.result .stats { gap: var(--s-12); align-items: flex-end; }
+.stat .v.big { font-size: 40px; }
+.stat .k { display: flex; align-items: center; gap: 4px; }
+.stat .k .ic { width: 12px; height: 12px; }
+
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="rail">
+    <div class="wordmark"><span class="mark"><svg class="ic"><use href="#ph-broadcast"/></svg></span>bnm</div>
+    <nav class="nav" aria-label="Sections">
+        <a class="nav-item" href="01-overview.html"><svg class="ic"><use href="#ph-house"/></svg><span>Overview</span><kbd>1</kbd></a>
+        <a class="nav-item" href="02-wifi.html"><svg class="ic"><use href="#ph-wifi-high"/></svg><span>Wi-Fi</span><kbd>2</kbd></a>
+        <a class="nav-item" href="03-vpn.html"><svg class="ic"><use href="#ph-shield-check"/></svg><span>VPN</span><kbd>3</kbd></a>
+        <a class="nav-item" href="04-quality.html"><svg class="ic"><use href="#ph-pulse"/></svg><span>Quality</span><kbd>4</kbd></a>
+        <a class="nav-item" href="05-speed.html" aria-current="page"><svg class="ic"><use href="#ph-gauge"/></svg><span>Speed</span><kbd>5</kbd></a>
+        <a class="nav-item" href="#"><svg class="ic"><use href="#ph-network"/></svg><span>Devices</span><kbd>6</kbd></a>
+        <a class="nav-item" href="07-settings.html"><svg class="ic"><use href="#ph-gear-six"/></svg><span>Settings</span><kbd>7</kbd></a>
+    </nav>
+    <div class="rail-spacer"></div>
+    <div class="conn-pill" title="Connected to ALHN-F832-5">
+      <span class="dot ok"></span>
+      <span class="name">ALHN-F832-5</span>
+      <span class="meta"><span class="mono">192.168.1.73</span><svg class="ic tone-vpn"><use href="#ph-shield-check"/></svg></span>
+    </div>
+  </aside>
+  <div class="main">
+    <header class="top">
+      <div class="crumb">
+        <svg class="ic tone-wifi"><use href="#ph-wifi-high"/></svg>
+        <span class="name">ALHN-F832-5</span>
+        <span class="ip mono">192.168.1.73/24</span>
+      </div>
+      <span class="sep"></span>
+      <span class="status"><span class="dot ok"></span>Internet</span>
+      <span class="sep"></span>
+      <span class="status"><span class="badge warn"><svg class="ic"><use href="#ph-spinner-gap"/></svg>Learning 12/40</span></span>
+      <div class="right">
+        <button class="search-btn" type="button"><svg class="ic"><use href="#ph-magnifying-glass"/></svg><span>Search or run a command</span><span class="keys"><kbd>Ctrl</kbd><kbd>K</kbd></span></button>
+      </div>
+    </header>
+    <main class="content">
+      <div class="content-inner">
+
+<div class="page-head">
+  <div><h1 class="h1">Speed</h1><p>On demand only. Nothing runs in the background.</p></div>
+  <div class="actions">
+    <div class="select-wrap" style="width:180px"><select class="select" aria-label="Provider" style="height:var(--control-h)"><option>Cloudflare</option><option>LibreSpeed</option><option>iperf3 · 10.0.0.2</option></select><svg class="ic"><use href="#ph-caret-up-down"/></svg></div>
+  </div>
+</div>
+
+<!-- state=idle -->
+<section class="hero" id="sp-idle">
+  <div class="hero-empty">
+    <svg class="ic ic-2xl muted"><use href="#ph-gauge"/></svg>
+    <div class="h2 mt-3">Measure ALHN-F832-5</div>
+    <p class="sub mt-2">A full test moves about 100 MB and takes 20 s. Quick stops at 10 MB.</p>
+    <div class="flex mt-4"><button class="btn btn-primary btn-lg" type="button"><svg class="ic"><use href="#ph-play"/></svg>Run <span class="keys"><kbd title="Enter"><svg class="ic"><use href="#ph-arrow-elbow-down-left"/></svg></kbd></span></button><button class="btn btn-lg" type="button"><svg class="ic"><use href="#ph-lightning"/></svg>Quick <span class="keys"><kbd>Q</kbd></span></button></div>
+    <div class="sub sm mt-4">Last run today at <span class="mono">09:14</span>: <span class="mono">19.8</span> down, <span class="mono">5.9</span> up</div>
+  </div>
+</section>
+
+<!-- state=running -->
+<section class="hero hidden" id="sp-running">
+  <div class="hero-run">
+    <div class="phase-label sub"><span class="dot accent"></span>Download</div>
+    <div class="counter"><span class="mono" id="counter">0.0</span><span class="unit">Mbit/s</span></div>
+    <div class="progress" style="width:320px"><i class="done"></i><i style="--p:.62"></i><i></i></div>
+    <div class="phases sub sm"><span>latency <span class="mono">11 ms</span></span><span>download</span><span>upload</span></div>
+    <div class="mt-4"><button class="btn btn-ghost" type="button">Cancel <span class="keys"><kbd>Esc</kbd></span></button></div>
+  </div>
+</section>
+
+<!-- state=result -->
+<section class="hero hidden" id="sp-result">
+  <div class="result">
+    <div class="stats">
+      <div class="stat"><span class="v big">21.4<small>Mbit/s</small></span><span class="k"><svg class="ic"><use href="#ph-download-simple"/></svg>download</span></div>
+      <div class="stat"><span class="v big">6.2<small>Mbit/s</small></span><span class="k"><svg class="ic"><use href="#ph-upload-simple"/></svg>upload</span></div>
+      <div class="stat"><span class="v">11.2<small>ms</small></span><span class="k">latency</span></div>
+      <div class="stat"><span class="v">1.8<small>ms</small></span><span class="k">jitter</span></div>
+    </div>
+    <div class="flex mt-4"><p class="sub sm">Cloudflare via <span class="mono">LHR</span>, <span class="mono">104 MB</span> moved in <span class="mono">21 s</span>.</p>
+      <div class="ml-auto btn-group"><button class="btn btn-primary" type="button"><svg class="ic"><use href="#ph-arrows-clockwise"/></svg>Run again <span class="keys"><kbd title="Enter"><svg class="ic"><use href="#ph-arrow-elbow-down-left"/></svg></kbd></span></button><button class="btn" type="button"><svg class="ic"><use href="#ph-copy"/></svg>Copy</button></div></div>
+  </div>
+</section>
+
+<section class="section">
+  <div class="section-head"><h2 class="h3">History</h2><span class="sub sm">this network and others</span><div class="actions"><button class="btn btn-ghost" type="button"><svg class="ic"><use href="#ph-download-simple"/></svg>Export CSV</button></div></div>
+  <table class="table">
+    <thead><tr><th>When</th><th>Network</th><th>Provider</th><th class="num">Down Mbit/s</th><th class="num">Up Mbit/s</th><th class="num">Latency ms</th><th class="num">Jitter ms</th><th></th></tr></thead>
+    <tbody>
+<tr><td class="mono">Today 14:36</td><td class="sub">ALHN-F832-5</td><td class="sub">Cloudflare</td><td class="num">21.4</td><td class="num">6.2</td><td class="num">11.2</td><td class="num">1.8</td><td class="sub"><span class="tag">quick</span></td></tr>
+<tr><td class="mono">Today 09:14</td><td class="sub">ALHN-F832-5</td><td class="sub">Cloudflare</td><td class="num">19.8</td><td class="num">5.9</td><td class="num">12.0</td><td class="num">2.4</td><td></td></tr>
+<tr><td class="mono">Sat 18:02</td><td class="sub">ALHN-F832-5</td><td class="sub">Cloudflare</td><td class="num">22.1</td><td class="num">6.4</td><td class="num">10.8</td><td class="num">1.1</td><td></td></tr>
+<tr><td class="mono">Fri 11:40</td><td class="sub">Pixel_9a hotspot</td><td class="sub">Cloudflare</td><td class="num">48.6</td><td class="num">17.3</td><td class="num">31.5</td><td class="num">6.7</td><td></td></tr>
+<tr><td class="mono">Thu 21:15</td><td class="sub">ALHN-F832-5</td><td class="sub">iperf3 <span class="mono">10.0.0.2</span></td><td class="num">812.0</td><td class="num">790.4</td><td class="num">0.6</td><td class="num">0.1</td><td></td></tr>
+</tbody>
+  </table>
+</section>
+
+      </div>
+    </main>
+  </div>
+</div>
+
+<script src="icons/sprite.js"></script>
+<script src="theme-switcher.js"></script>
+<script>
+
+(function(){
+  var st = new URLSearchParams(location.search).get('state') || 'idle';
+  ['idle','running','result'].forEach(function(s){ document.getElementById('sp-'+s).classList.toggle('hidden', s !== st); });
+  if (st !== 'running') return;
+  // counting number: ease toward the live sample, ~8 updates/s, respects reduced motion
+  var el = document.getElementById('counter'), target = 21.3, cur = 0, reduce = matchMedia('(prefers-reduced-motion: reduce)').matches || document.documentElement.dataset.motion === '0';
+  if (reduce) { el.textContent = target.toFixed(1); return; }
+  var t0 = Date.now(), timer = setInterval(function(){ var p = Math.min(1, (Date.now() - t0) / 1400); var e = 1 - Math.pow(1 - p, 3); el.textContent = (target * e).toFixed(1); if (p >= 1) clearInterval(timer); }, 40);
+})();
+
+</script>
+</body>
+</html>
