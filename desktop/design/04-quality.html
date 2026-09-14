@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>bnm · Quality</title>
+<link rel="stylesheet" href="tokens.css">
+<link id="preset" rel="stylesheet" href="presets/dark.css">
+<link rel="stylesheet" href="base.css">
+<style>
+
+.anchor-head { display: flex; align-items: flex-end; gap: var(--s-6); margin-bottom: var(--s-3); }
+.anchor-head .stats { margin-left: auto; gap: var(--s-6); }
+.anchor-head .stat .v { font-size: 22px; }
+.anchor .chart { height: 120px; }
+.anchor .chart svg { height: 120px; }
+
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="rail">
+    <div class="wordmark"><span class="mark"><svg class="ic"><use href="#ph-broadcast"/></svg></span>bnm</div>
+    <nav class="nav" aria-label="Sections">
+        <a class="nav-item" href="01-overview.html"><svg class="ic"><use href="#ph-house"/></svg><span>Overview</span><kbd>1</kbd></a>
+        <a class="nav-item" href="02-wifi.html"><svg class="ic"><use href="#ph-wifi-high"/></svg><span>Wi-Fi</span><kbd>2</kbd></a>
+        <a class="nav-item" href="03-vpn.html"><svg class="ic"><use href="#ph-shield-check"/></svg><span>VPN</span><kbd>3</kbd></a>
+        <a class="nav-item" href="04-quality.html" aria-current="page"><svg class="ic"><use href="#ph-pulse"/></svg><span>Quality</span><kbd>4</kbd></a>
+        <a class="nav-item" href="05-speed.html"><svg class="ic"><use href="#ph-gauge"/></svg><span>Speed</span><kbd>5</kbd></a>
+        <a class="nav-item" href="#"><svg class="ic"><use href="#ph-network"/></svg><span>Devices</span><kbd>6</kbd></a>
+        <a class="nav-item" href="07-settings.html"><svg class="ic"><use href="#ph-gear-six"/></svg><span>Settings</span><kbd>7</kbd></a>
+    </nav>
+    <div class="rail-spacer"></div>
+    <div class="conn-pill" title="Connected to ALHN-F832-5">
+      <span class="dot ok"></span>
+      <span class="name">ALHN-F832-5</span>
+      <span class="meta"><span class="mono">192.168.1.73</span><svg class="ic tone-vpn"><use href="#ph-shield-check"/></svg></span>
+    </div>
+  </aside>
+  <div class="main">
+    <header class="top">
+      <div class="crumb">
+        <svg class="ic tone-wifi"><use href="#ph-wifi-high"/></svg>
+        <span class="name">ALHN-F832-5</span>
+        <span class="ip mono">192.168.1.73/24</span>
+      </div>
+      <span class="sep"></span>
+      <span class="status"><span class="dot ok"></span>Internet</span>
+      <span class="sep"></span>
+      <span class="status"><span class="badge warn"><svg class="ic"><use href="#ph-spinner-gap"/></svg>Learning 12/40</span></span>
+      <div class="right">
+        <button class="search-btn" type="button"><svg class="ic"><use href="#ph-magnifying-glass"/></svg><span>Search or run a command</span><span class="keys"><kbd>Ctrl</kbd><kbd>K</kbd></span></button>
+      </div>
+    </header>
+    <main class="content">
+      <div class="content-inner">
+
+<div class="page-head">
+  <div><h1 class="h1">Quality</h1><p>How this network behaves against its own history. Probes every <span class="mono">30 s</span>.</p></div>
+  <div class="actions">
+    <button class="btn" type="button"><svg class="ic"><use href="#ph-pause"/></svg>Pause <span class="keys"><kbd>P</kbd></span></button>
+    <button class="btn btn-ghost" type="button"><svg class="ic"><use href="#ph-arrow-counter-clockwise"/></svg>Reset baseline</button>
+  </div>
+</div>
+<div class="banner ok" id="b-ok"><svg class="ic"><use href="#ph-check-circle-fill"/></svg><div><div class="t">Within baseline</div><div class="d">Round-trip and loss look like they usually do on ALHN-F832-5.</div></div><div class="actions sub sm">40 samples · since <span class="mono">13:52</span></div></div>
+<div class="banner warn hidden" id="b-learning"><svg class="ic"><use href="#ph-spinner-gap"/></svg><div><div class="t">Learning this network</div><div class="d">12 of 40 samples collected. Verdicts start once the baseline is known.</div></div><div class="actions"><div class="progress" style="width:120px"><i style="--p:.3"></i></div></div></div>
+<div class="banner error hidden" id="b-degraded"><svg class="ic"><use href="#ph-warning-circle-fill"/></svg><div><div class="t">Degraded since <span class="mono">14:02</span></div><div class="d">Round-trip to 1.1.1.1 is 2.4x its baseline; loss <span class="mono">6%</span>. The gateway is fine, so it is probably upstream.</div></div><div class="actions"><button class="btn" type="button"><svg class="ic"><use href="#ph-gauge"/></svg>Run speed test</button></div></div>
+
+
+<section class="section anchor" id="gw">
+  <div class="anchor-head">
+    <div><h2 class="h3">Gateway</h2><div class="sub sm mono">192.168.1.254 · icmp</div></div>
+    <div class="stats">
+      <div class="stat"><span class="v">1.4<small>ms</small></span><span class="k">now</span></div>
+      <div class="stat"><span class="v sub">1.2<small>ms</small></span><span class="k">baseline</span></div>
+      <div class="stat"><span class="v sub">0<small>%</small></span><span class="k">loss</span></div>
+    </div>
+  </div>
+  <div class="chart" id="gw-chart"></div>
+</section>
+
+<section class="section anchor" id="cf">
+  <div class="anchor-head">
+    <div><h2 class="h3">1.1.1.1</h2><div class="sub sm mono">one.one.one.one · icmp</div></div>
+    <div class="stats">
+      <div class="stat"><span class="v">11.2<small>ms</small></span><span class="k">now</span></div>
+      <div class="stat"><span class="v sub">9.8<small>ms</small></span><span class="k">baseline</span></div>
+      <div class="stat"><span class="v sub">0<small>%</small></span><span class="k">loss</span></div>
+    </div>
+  </div>
+  <div class="chart" id="cf-chart"></div>
+</section>
+<section class="section anchor">
+  <div class="anchor-head">
+    <div><h2 class="h3">DNS</h2><div class="sub sm">resolve <span class="mono">cloudflare.com</span> via <span class="mono">192.168.1.254</span></div></div>
+    <div class="stats"><div class="stat"><span class="v">14<small>ms</small></span><span class="k">now</span></div><div class="stat"><span class="v sub">12<small>ms</small></span><span class="k">baseline</span></div></div>
+  </div>
+  <div class="chart" id="dns-chart"></div>
+</section>
+<div class="chart-legend mt-4"><span><i></i>measured</span><span><i class="band"></i>baseline band</span><span><i class="warn"></i>degraded</span><span><i style="background:var(--error);width:3px;height:6px"></i>lost probe</span></div>
+
+      </div>
+    </main>
+  </div>
+</div>
+
+<script src="icons/sprite.js"></script>
+<script src="theme-switcher.js"></script>
+<script>
+
+// Sparkline / quality chart builder. data: array of rtt ms (-1 = loss). base: baseline rtt. tol: band half-width.
+function chart(el, opts) {
+  var data = opts.data, W = opts.w || 400, H = opts.h || 120, padL = opts.axis ? 34 : 0, padB = opts.axis ? 16 : 0, padT = 6;
+  var max = Math.max.apply(null, data.filter(function (v) { return v >= 0; }).concat([opts.base + opts.tol]));
+  var ymax = opts.ymax || Math.ceil(max * 1.15);
+  var iw = W - padL, ih = H - padB - padT;
+  var x = function (i) { return padL + i / (data.length - 1) * iw; };
+  var y = function (v) { return padT + ih - (v / ymax) * ih; };
+  var ns = "http://www.w3.org/2000/svg";
+  var svg = document.createElementNS(ns, "svg"); svg.setAttribute("viewBox", "0 0 " + W + " " + H); svg.setAttribute("height", H);
+  function mk(t, a, parent) { var e = document.createElementNS(ns, t); for (var k in a) e.setAttribute(k, a[k]); (parent || svg).appendChild(e); return e; }
+  // grid: 3 hairlines
+  var g = mk("g", { "class": "grid" });
+  [0, 0.5, 1].forEach(function (f) { var yy = Math.round(padT + ih * f) + 0.5; mk("line", { x1: padL, x2: W, y1: yy, y2: yy }, g); });
+  // baseline band drawn behind the line
+  var top = y(opts.base + opts.tol), bot = y(Math.max(0, opts.base - opts.tol));
+  mk("rect", { "class": "band", x: padL, y: top, width: iw, height: bot - top });
+  var by = Math.round(y(opts.base)) + 0.5; mk("line", { "class": "band-mid", x1: padL, x2: W, y1: by, y2: by });
+  // line (gaps where lost)
+  var d = "", pen = false;
+  data.forEach(function (v, i) { if (v < 0) { pen = false; return; } d += (pen ? "L" : "M") + x(i).toFixed(1) + " " + y(v).toFixed(1); pen = true; });
+  var path = mk("path", { "class": "line " + (opts.tone || ""), d: d });
+  // loss ticks at the bottom
+  data.forEach(function (v, i) { if (v < 0) mk("rect", { "class": "loss", x: x(i) - 1.5, y: padT + ih - 6, width: 3, height: 6 }); });
+  // end marker
+  var last = data.length - 1; while (data[last] < 0) last--;
+  mk("circle", { "class": "end", cx: x(last), cy: y(data[last]), r: 3 });
+  if (opts.axis) {
+    var ax = mk("g", { "class": "axis" });
+    [0, 0.5, 1].forEach(function (f) { var t = mk("text", { x: padL - 6, y: padT + ih * (1 - f) + 3, "text-anchor": "end" }, ax); t.textContent = (ymax * f).toFixed(ymax < 5 ? 1 : 0); });
+    var t0 = mk("text", { x: padL, y: H - 2 }, ax); t0.textContent = opts.from || "-30 min";
+    var t1 = mk("text", { x: W, y: H - 2, "text-anchor": "end" }, ax); t1.textContent = "now";
+  }
+  el.appendChild(svg);
+  // Draw-in: measure first, then add the class so the animation starts with the right length;
+  // drop the class when done so the settled state is a plain stroke.
+  var motionOff = document.documentElement.dataset.motion === "0" || matchMedia("(prefers-reduced-motion: reduce)").matches;
+  if (opts.draw !== false && !motionOff) {
+    path.style.setProperty("--len", path.getTotalLength().toFixed(0));
+    path.classList.add("draw");
+    path.addEventListener("animationend", function () { path.classList.remove("draw"); path.style.removeProperty("--len"); }, { once: true });
+  }
+}
+// deterministic noise
+function series(n, base, jitter, seed, spikes) {
+  var s = seed || 1, out = [];
+  function rnd() { s = (s * 16807) % 2147483647; return (s - 1) / 2147483646; }
+  for (var i = 0; i < n; i++) { var v = base + (rnd() - 0.5) * 2 * jitter; if (spikes && spikes[i] !== undefined) v = spikes[i]; out.push(Math.round(v * 100) / 100); }
+  return out;
+}
+
+(function(){
+  var st = new URLSearchParams(location.search).get('state') || 'ok';
+  ['ok','learning','degraded'].forEach(function(s){ document.getElementById('b-'+s).classList.toggle('hidden', s !== st); });
+  var badge = document.querySelector('.top .status .badge');
+  if (st === 'ok') badge.outerHTML = '<span class="badge ok"><svg class="ic"><use href="#ph-check"/></svg>Quality ok</span>';
+  if (st === 'degraded') badge.outerHTML = '<span class="badge error"><svg class="ic"><use href="#ph-warning-circle"/></svg>Degraded 14:02</span>';
+  var deg = st === 'degraded';
+  if (deg) { var cfv = document.querySelectorAll('#cf .stat .v'); cfv[0].innerHTML = '23.6<small>ms</small>'; cfv[2].innerHTML = '6<small>%</small>'; cfv[0].classList.add('tone-warn'); }
+  var cf = deg ? series(60, 10.4, 1.4, 5, {40:16.2,41:22.8,42:24.1,43:-1,44:21.0,45:23.5,46:19.8,47:-1,48:25.2,49:22.9,50:24.4,51:23.0,52:26.1,53:-1,54:24.7,55:23.9,56:25.5,57:22.8,58:24.0,59:23.6})
+              : series(60, 10.4, 1.4, 5, {22: 15.2, 23: 13.1, 44: -1});
+  chart(document.getElementById('gw-chart'), { data: series(60, 1.25, 0.25, 3, {17: 2.9, 38: 2.2}), base: 1.2, tol: 0.5, w: 1040, h: 120, axis: true, ymax: 4, draw: true });
+  chart(document.getElementById('cf-chart'), { data: cf, base: 9.8, tol: 2.6, w: 1040, h: 120, axis: true, ymax: deg ? 30 : 20, tone: deg ? 'degraded' : '' });
+  chart(document.getElementById('dns-chart'), { data: series(60, 12.5, 2.2, 11, {9: 24, 51: 20}), base: 12, tol: 4, w: 1040, h: 120, axis: true, ymax: 30, tone: 'dns' });
+})();
+
+</script>
+</body>
+</html>

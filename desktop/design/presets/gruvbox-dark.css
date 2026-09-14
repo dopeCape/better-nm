@@ -1,0 +1,23 @@
+/* Gruvbox Dark
+   scheme: dark
+   https://github.com/morhetz/gruvbox
+   16 tokens; edit here or generate from a Base16 scheme (DESIGN.md). */
+:root {
+  color-scheme: dark;
+  --base: #282828;
+  --mantle: #1d2021;
+  --surface: #3c3836;
+  --overlay: #32302f;
+  --text: #ebdbb2;
+  --subtext: #a89984;
+  --muted: #7c6f64;
+  --accent: #83a598;
+  --accent-text: #282828;
+  --ok: #b8bb26;
+  --warn: #fabd2f;
+  --error: #fb4934;
+  --vpn: #fe8019;
+  --wifi: #8ec07c;
+  --border: #3c3836;
+  --selection: #83a59826;
+}

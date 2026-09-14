@@ -1,0 +1,23 @@
+/* Catppuccin Latte
+   scheme: light
+   https://github.com/catppuccin/catppuccin
+   16 tokens; edit here or generate from a Base16 scheme (DESIGN.md). */
+:root {
+  color-scheme: light;
+  --base: #eff1f5;
+  --mantle: #e6e9ef;
+  --surface: #dce0e8;
+  --overlay: #f8f9fc;
+  --text: #4c4f69;
+  --subtext: #6c6f85;
+  --muted: #9ca0b0;
+  --accent: #1e66f5;
+  --accent-text: #eff1f5;
+  --ok: #40a02b;
+  --warn: #df8e1d;
+  --error: #d20f39;
+  --vpn: #fe640b;
+  --wifi: #04a5e5;
+  --border: #ccd0da;
+  --selection: #1e66f522;
+}

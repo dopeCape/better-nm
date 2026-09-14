@@ -1,0 +1,23 @@
+/* Catppuccin Mocha
+   scheme: dark
+   https://github.com/catppuccin/catppuccin
+   16 tokens; edit here or generate from a Base16 scheme (DESIGN.md). */
+:root {
+  color-scheme: dark;
+  --base: #1e1e2e;
+  --mantle: #181825;
+  --surface: #313244;
+  --overlay: #252537;
+  --text: #cdd6f4;
+  --subtext: #a6adc8;
+  --muted: #6c7086;
+  --accent: #89b4fa;
+  --accent-text: #1e1e2e;
+  --ok: #a6e3a1;
+  --warn: #f9e2af;
+  --error: #f38ba8;
+  --vpn: #fab387;
+  --wifi: #89dceb;
+  --border: #313244;
+  --selection: #89b4fa26;
+}

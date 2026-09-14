@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>bnm · Settings</title>
+<link rel="stylesheet" href="tokens.css">
+<link id="preset" rel="stylesheet" href="presets/dark.css">
+<link rel="stylesheet" href="base.css">
+<style>
+
+.settings { max-width: 760px; }
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s-6); align-items: start; }
+.presets { display: grid; grid-template-columns: repeat(5, 1fr); gap: var(--s-2); }
+.preset { display: flex; flex-direction: column; gap: 6px; padding: 4px; border-radius: var(--r); border: var(--hairline) solid var(--border); background: var(--base); text-align: left; transition: border-color var(--t-fast); }
+.preset:hover { border-color: var(--muted); }
+.preset[aria-pressed="true"] { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.preset .sw { display: flex; gap: 3px; height: 30px; padding: 6px; border-radius: 3px; }
+.preset .sw i { flex: 1; border-radius: 2px; }
+.preset .pn { font-size: var(--fs-sm); color: var(--subtext); padding: 0 2px 2px; }
+.preset[aria-pressed="true"] .pn { color: var(--text); }
+.tokens { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--s-2) var(--s-3); }
+.tok { display: grid; grid-template-columns: 16px 1fr; grid-template-rows: auto auto; column-gap: 8px; align-items: center; }
+.tok .chip { width: 16px; height: 16px; border-radius: 3px; border: var(--hairline) solid var(--border); grid-row: 1; }
+.tok .tn { font-size: var(--fs-sm); color: var(--subtext); grid-row: 1; }
+.tok .input { grid-column: 1 / -1; height: var(--control-h); font-size: var(--fs-sm); }
+details summary { list-style: none; cursor: default; }
+details summary::-webkit-details-marker { display: none; }
+details .caret { color: var(--muted); transition: transform var(--t-fast); }
+details[open] .caret { transform: rotate(90deg); }
+.switch-row { padding: 6px 0; }
+.switch-row + .switch-row { border-top: var(--hairline) solid var(--border); }
+
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="rail">
+    <div class="wordmark"><span class="mark"><svg class="ic"><use href="#ph-broadcast"/></svg></span>bnm</div>
+    <nav class="nav" aria-label="Sections">
+        <a class="nav-item" href="01-overview.html"><svg class="ic"><use href="#ph-house"/></svg><span>Overview</span><kbd>1</kbd></a>
+        <a class="nav-item" href="02-wifi.html"><svg class="ic"><use href="#ph-wifi-high"/></svg><span>Wi-Fi</span><kbd>2</kbd></a>
+        <a class="nav-item" href="03-vpn.html"><svg class="ic"><use href="#ph-shield-check"/></svg><span>VPN</span><kbd>3</kbd></a>
+        <a class="nav-item" href="04-quality.html"><svg class="ic"><use href="#ph-pulse"/></svg><span>Quality</span><kbd>4</kbd></a>
+        <a class="nav-item" href="05-speed.html"><svg class="ic"><use href="#ph-gauge"/></svg><span>Speed</span><kbd>5</kbd></a>
+        <a class="nav-item" href="#"><svg class="ic"><use href="#ph-network"/></svg><span>Devices</span><kbd>6</kbd></a>
+        <a class="nav-item" href="07-settings.html" aria-current="page"><svg class="ic"><use href="#ph-gear-six"/></svg><span>Settings</span><kbd>7</kbd></a>
+    </nav>
+    <div class="rail-spacer"></div>
+    <div class="conn-pill" title="Connected to ALHN-F832-5">
+      <span class="dot ok"></span>
+      <span class="name">ALHN-F832-5</span>
+      <span class="meta"><span class="mono">192.168.1.73</span><svg class="ic tone-vpn"><use href="#ph-shield-check"/></svg></span>
+    </div>
+  </aside>
+  <div class="main">
+    <header class="top">
+      <div class="crumb">
+        <svg class="ic tone-wifi"><use href="#ph-wifi-high"/></svg>
+        <span class="name">ALHN-F832-5</span>
+        <span class="ip mono">192.168.1.73/24</span>
+      </div>
+      <span class="sep"></span>
+      <span class="status"><span class="dot ok"></span>Internet</span>
+      <span class="sep"></span>
+      <span class="status"><span class="badge warn"><svg class="ic"><use href="#ph-spinner-gap"/></svg>Learning 12/40</span></span>
+      <div class="right">
+        <button class="search-btn" type="button"><svg class="ic"><use href="#ph-magnifying-glass"/></svg><span>Search or run a command</span><span class="keys"><kbd>Ctrl</kbd><kbd>K</kbd></span></button>
+      </div>
+    </header>
+    <main class="content">
+      <div class="content-inner">
+
+<div class="page-head">
+  <div><h1 class="h1">Settings</h1><p>Saved to <span class="mono">~/.config/bnm/config.toml</span>. The daemon picks changes up live.</p></div>
+</div>
+<div class="settings">
+  <section class="section flush">
+    <div class="section-head"><h2 class="h3">Appearance</h2></div>
+    <div class="field"><label>Theme</label>
+      <div class="presets"><button class="preset" type="button" data-preset="dark" aria-pressed="true"><span class="sw" style="background:#141517"><i style="background:#141517"></i><i style="background:#1c1e21"></i><i style="background:#5fa8c8"></i><i style="background:#52b788"></i><i style="background:#e5695f"></i><i style="background:#e7e9ec"></i></span><span class="pn">bnm Dark</span></button>
+<button class="preset" type="button" data-preset="light"><span class="sw" style="background:#f7f7f8"><i style="background:#f7f7f8"></i><i style="background:#e8e8eb"></i><i style="background:#2b7fa6"></i><i style="background:#2e8b57"></i><i style="background:#c8433b"></i><i style="background:#1b1c1f"></i></span><span class="pn">bnm Light</span></button>
+<button class="preset" type="button" data-preset="catppuccin-mocha"><span class="sw" style="background:#1e1e2e"><i style="background:#1e1e2e"></i><i style="background:#313244"></i><i style="background:#89b4fa"></i><i style="background:#a6e3a1"></i><i style="background:#f38ba8"></i><i style="background:#cdd6f4"></i></span><span class="pn">Catppuccin Mocha</span></button>
+<button class="preset" type="button" data-preset="catppuccin-latte"><span class="sw" style="background:#eff1f5"><i style="background:#eff1f5"></i><i style="background:#dce0e8"></i><i style="background:#1e66f5"></i><i style="background:#40a02b"></i><i style="background:#d20f39"></i><i style="background:#4c4f69"></i></span><span class="pn">Catppuccin Latte</span></button>
+<button class="preset" type="button" data-preset="gruvbox-dark"><span class="sw" style="background:#282828"><i style="background:#282828"></i><i style="background:#3c3836"></i><i style="background:#83a598"></i><i style="background:#b8bb26"></i><i style="background:#fb4934"></i><i style="background:#ebdbb2"></i></span><span class="pn">Gruvbox Dark</span></button>
+<button class="preset" type="button" data-preset="nord"><span class="sw" style="background:#2e3440"><i style="background:#2e3440"></i><i style="background:#3b4252"></i><i style="background:#88c0d0"></i><i style="background:#a3be8c"></i><i style="background:#bf616a"></i><i style="background:#eceff4"></i></span><span class="pn">Nord</span></button>
+<button class="preset" type="button" data-preset="tokyo-night"><span class="sw" style="background:#1a1b26"><i style="background:#1a1b26"></i><i style="background:#24283b"></i><i style="background:#7aa2f7"></i><i style="background:#9ece6a"></i><i style="background:#f7768e"></i><i style="background:#c0caf5"></i></span><span class="pn">Tokyo Night</span></button>
+<button class="preset" type="button" data-preset="rose-pine"><span class="sw" style="background:#191724"><i style="background:#191724"></i><i style="background:#1f1d2e"></i><i style="background:#ebbcba"></i><i style="background:#9ccfd8"></i><i style="background:#eb6f92"></i><i style="background:#e0def4"></i></span><span class="pn">Rosé Pine</span></button>
+<button class="preset" type="button" data-preset="dracula"><span class="sw" style="background:#282a36"><i style="background:#282a36"></i><i style="background:#343746"></i><i style="background:#8be9fd"></i><i style="background:#50fa7b"></i><i style="background:#ff5555"></i><i style="background:#f8f8f2"></i></span><span class="pn">Dracula</span></button>
+<button class="preset" type="button" data-preset="one-dark"><span class="sw" style="background:#282c34"><i style="background:#282c34"></i><i style="background:#2c313a"></i><i style="background:#61afef"></i><i style="background:#98c379"></i><i style="background:#e06c75"></i><i style="background:#c8ccd4"></i></span><span class="pn">One Dark</span></button></div>
+      <span class="help">Any Base16 scheme converts to a preset; see the palette editor for the 16 tokens.</span>
+    </div>
+    <details class="mt-4">
+      <summary class="flex"><svg class="ic caret"><use href="#ph-caret-right"/></svg><span class="h3">Custom palette</span><span class="sub sm">start from the current preset</span><span class="ml-auto btn-group"><button class="btn btn-ghost" type="button"><svg class="ic"><use href="#ph-file-arrow-up"/></svg>Import Base16</button></span></summary>
+      <div class="tokens mt-3"><label class="tok"><span class="chip" style="background:#141517"></span><span class="tn">base</span><input class="input mono" value="#141517" aria-label="base"></label>
+<label class="tok"><span class="chip" style="background:#0f1012"></span><span class="tn">mantle</span><input class="input mono" value="#0f1012" aria-label="mantle"></label>
+<label class="tok"><span class="chip" style="background:#1c1e21"></span><span class="tn">surface</span><input class="input mono" value="#1c1e21" aria-label="surface"></label>
+<label class="tok"><span class="chip" style="background:#1f2124"></span><span class="tn">overlay</span><input class="input mono" value="#1f2124" aria-label="overlay"></label>
+<label class="tok"><span class="chip" style="background:#e7e9ec"></span><span class="tn">text</span><input class="input mono" value="#e7e9ec" aria-label="text"></label>
+<label class="tok"><span class="chip" style="background:#a0a5ad"></span><span class="tn">subtext</span><input class="input mono" value="#a0a5ad" aria-label="subtext"></label>
+<label class="tok"><span class="chip" style="background:#737880"></span><span class="tn">muted</span><input class="input mono" value="#737880" aria-label="muted"></label>
+<label class="tok"><span class="chip" style="background:#5fa8c8"></span><span class="tn">accent</span><input class="input mono" value="#5fa8c8" aria-label="accent"></label>
+<label class="tok"><span class="chip" style="background:#0b1215"></span><span class="tn">accent-text</span><input class="input mono" value="#0b1215" aria-label="accent-text"></label>
+<label class="tok"><span class="chip" style="background:#52b788"></span><span class="tn">ok</span><input class="input mono" value="#52b788" aria-label="ok"></label>
+<label class="tok"><span class="chip" style="background:#e3b341"></span><span class="tn">warn</span><input class="input mono" value="#e3b341" aria-label="warn"></label>
+<label class="tok"><span class="chip" style="background:#e5695f"></span><span class="tn">error</span><input class="input mono" value="#e5695f" aria-label="error"></label>
+<label class="tok"><span class="chip" style="background:#e08a4f"></span><span class="tn">vpn</span><input class="input mono" value="#e08a4f" aria-label="vpn"></label>
+<label class="tok"><span class="chip" style="background:#6db7d6"></span><span class="tn">wifi</span><input class="input mono" value="#6db7d6" aria-label="wifi"></label>
+<label class="tok"><span class="chip" style="background:#26292d"></span><span class="tn">border</span><input class="input mono" value="#26292d" aria-label="border"></label>
+<label class="tok"><span class="chip" style="background:#5fa8c826"></span><span class="tn">selection</span><input class="input mono" value="#5fa8c826" aria-label="selection"></label></div>
+      <div class="flex mt-3"><button class="btn btn-primary" type="button">Save as "Mine"</button><button class="btn btn-ghost" type="button">Reset to preset</button></div>
+    </details>
+    <div class="grid-2 mt-4">
+      <div class="field"><label for="font">UI font</label>
+        <div class="select-wrap"><select id="font" class="select"><option>Geist (bundled)</option><option>Inter (bundled)</option><option>System</option></select><svg class="ic"><use href="#ph-caret-up-down"/></svg></div>
+        <span class="help">Machine values always use JetBrains Mono, or your Nerd Font if present.</span></div>
+      <div class="field"><label>Density</label>
+        <div class="segmented"><button aria-pressed="false">Compact</button><button aria-pressed="true">Default</button><button aria-pressed="false">Comfortable</button></div>
+        <span class="help">Compact fits a 1120 x 720 window without scrolling.</span></div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="section-head"><h2 class="h3">Notifications</h2><div class="actions"><button class="btn btn-ghost" type="button"><svg class="ic"><use href="#ph-bell"/></svg>Send a test</button></div></div>
+    <div class="list">
+      <label class="switch-row"><span class="label">Connected and disconnected<span class="hint">Once per network change, roaming is ignored</span></span><button class="switch" role="switch" aria-checked="true"></button></label>
+      <label class="switch-row"><span class="label">No internet<span class="hint">After 10 s of limited or portal connectivity</span></span><button class="switch" role="switch" aria-checked="true"></button></label>
+      <label class="switch-row"><span class="label">Quality degraded and recovered<span class="hint">From the baseline engine, rate limited to one per 10 min</span></span><button class="switch" role="switch" aria-checked="true"></button></label>
+      <label class="switch-row"><span class="label">VPN up and down</span><button class="switch" role="switch" aria-checked="false"></button></label>
+      <label class="switch-row"><span class="label">Password prompts<span class="hint">Always on. A prompt you cannot see is a connection that never comes up.</span></span><button class="switch" role="switch" aria-checked="true" aria-disabled="true"></button></label>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="section-head"><h2 class="h3">Monitoring</h2></div>
+    <div class="grid-2">
+      <div class="field"><label for="iv">Probe interval</label><div class="select-wrap"><select id="iv" class="select"><option>15 s</option><option selected>30 s</option><option>60 s</option></select><svg class="ic"><use href="#ph-caret-up-down"/></svg></div></div>
+      <div class="field"><label for="anchors">Anchors</label><input id="anchors" class="input mono" value="gateway, 1.1.1.1"><span class="help">Comma separated hosts or IPs. The gateway is always first.</span></div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="section-head"><h2 class="h3">Daemon</h2><div class="actions"><span class="badge ok"><svg class="ic"><use href="#ph-check"/></svg>Running</span></div></div>
+    <div class="grid-2">
+      <dl class="kv tight">
+        <dt>Version</dt><dd><span class="mono">bnmd 0.4.1</span><span class="sub">api 1</span></dd>
+        <dt>Uptime</dt><dd><span class="mono">2 h 14 m</span></dd>
+        <dt>Socket</dt><dd><span class="mono truncate">$XDG_RUNTIME_DIR/bnm/bnmd.sock</span></dd>
+        <dt>NetworkManager</dt><dd><span class="mono">1.52.0</span></dd>
+      </dl>
+      <div>
+        <div class="banner accent"><svg class="ic"><use href="#ph-terminal-window"/></svg><div><div class="t">Run as a user service</div><div class="d">Installs <span class="mono">bnmd.service</span> under <span class="mono">systemd --user</span> so monitoring and prompts work before the app opens.</div></div><div class="actions"><button class="btn btn-primary" type="button">Install</button></div></div>
+        <div class="flex mt-3"><button class="btn btn-ghost" type="button"><svg class="ic"><use href="#ph-arrows-clockwise"/></svg>Restart daemon</button><button class="btn btn-ghost" type="button"><svg class="ic"><use href="#ph-list-dashes"/></svg>View log</button></div>
+      </div>
+    </div>
+  </section>
+</div>
+
+      </div>
+    </main>
+  </div>
+</div>
+
+<script src="icons/sprite.js"></script>
+<script src="theme-switcher.js"></script>
+<script>
+
+document.querySelectorAll('.preset').forEach(function(b){ b.addEventListener('click', function(){
+  document.querySelectorAll('.preset').forEach(function(x){ x.setAttribute('aria-pressed','false'); });
+  b.setAttribute('aria-pressed','true');
+  document.getElementById('preset').href = 'presets/' + b.dataset.preset + '.css'; document.documentElement.dataset.theme = b.dataset.preset;
+  var s = document.getElementById('ts-theme'); if (s) s.value = b.dataset.preset;
+}); });
+if (new URLSearchParams(location.search).get('state') === 'palette') document.querySelector('details').open = true;
+
+</script>
+</body>
+</html>

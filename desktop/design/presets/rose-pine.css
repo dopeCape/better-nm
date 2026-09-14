@@ -1,0 +1,23 @@
+/* Rosé Pine
+   scheme: dark
+   https://rosepinetheme.com
+   16 tokens; edit here or generate from a Base16 scheme (DESIGN.md). */
+:root {
+  color-scheme: dark;
+  --base: #191724;
+  --mantle: #16141f;
+  --surface: #1f1d2e;
+  --overlay: #26233a;
+  --text: #e0def4;
+  --subtext: #908caa;
+  --muted: #6e6a86;
+  --accent: #ebbcba;
+  --accent-text: #191724;
+  --ok: #9ccfd8;
+  --warn: #f6c177;
+  --error: #eb6f92;
+  --vpn: #31748f;
+  --wifi: #9ccfd8;
+  --border: #2a273f;
+  --selection: #ebbcba22;
+}

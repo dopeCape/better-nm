@@ -1,0 +1,23 @@
+/* Dracula
+   scheme: dark
+   https://draculatheme.com (accent is Dracula cyan, not its purple; see DESIGN.md)
+   16 tokens; edit here or generate from a Base16 scheme (DESIGN.md). */
+:root {
+  color-scheme: dark;
+  --base: #282a36;
+  --mantle: #21222c;
+  --surface: #343746;
+  --overlay: #2f313f;
+  --text: #f8f8f2;
+  --subtext: #a8abbe;
+  --muted: #6272a4;
+  --accent: #8be9fd;
+  --accent-text: #282a36;
+  --ok: #50fa7b;
+  --warn: #f1fa8c;
+  --error: #ff5555;
+  --vpn: #ffb86c;
+  --wifi: #8be9fd;
+  --border: #44475a;
+  --selection: #8be9fd22;
+}

@@ -1,0 +1,23 @@
+/* Nord
+   scheme: dark
+   https://www.nordtheme.com
+   16 tokens; edit here or generate from a Base16 scheme (DESIGN.md). */
+:root {
+  color-scheme: dark;
+  --base: #2e3440;
+  --mantle: #272c36;
+  --surface: #3b4252;
+  --overlay: #353b4a;
+  --text: #eceff4;
+  --subtext: #d8dee9;
+  --muted: #7b88a1;
+  --accent: #88c0d0;
+  --accent-text: #2e3440;
+  --ok: #a3be8c;
+  --warn: #ebcb8b;
+  --error: #bf616a;
+  --vpn: #d08770;
+  --wifi: #81a1c1;
+  --border: #3b4252;
+  --selection: #88c0d026;
+}
