@@ -117,7 +117,7 @@ func newRig(t *testing.T) *rig {
 	})
 	r.a.Start()
 	t.Cleanup(func() {
-		r.a.cancel()
+		r.a.Stop()
 		r.a.waitIdle(5 * time.Second)
 		c.Close()
 		cancel()
@@ -710,4 +710,21 @@ func containsObject(c *fyne.Container, obj fyne.CanvasObject) bool {
 		}
 	}
 	return false
+}
+
+// Regression: Fyne 2.8's FileDialog panics when Resize runs before Show.
+func TestVPNAddFromFileOpensDialog(t *testing.T) {
+	r := newRig(t)
+	r.ui(func() {
+		defer func() {
+			if p := recover(); p != nil {
+				t.Fatalf("addFromFile panicked: %v", p)
+			}
+		}()
+		r.vpn().addFromFile()
+	})
+	// the picker is an overlay on the window
+	if len(r.a.win.Canvas().Overlays().List()) == 0 {
+		t.Fatal("file dialog did not open")
+	}
 }

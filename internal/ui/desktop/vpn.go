@@ -309,8 +309,10 @@ func (v *vpnView) addFromFile() {
 		v.importContent(name, string(data))
 	}, v.a.win)
 	fd.SetFilter(storage.NewExtensionFileFilter([]string{".conf", ".ovpn"}))
-	fd.Resize(fyne.NewSize(720, 520))
+	// Show before Resize: Fyne 2.8's FileDialog builds its inner dialog on Show
+	// and Resize dereferences it (nil pointer panic the other way round).
 	fd.Show()
+	fd.Resize(fyne.NewSize(720, 520))
 }
 
 // importContent sends a VPN file's content to the daemon; the kind follows the

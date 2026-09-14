@@ -135,6 +135,7 @@ type App struct {
 
 	ctx    context.Context
 	cancel context.CancelFunc
+	loops  sync.WaitGroup // long-lived goroutines (stream loop) that may spawn bg work
 
 	header  *header
 	banner  *banner
@@ -181,7 +182,11 @@ func New(fy fyne.App, c *client.Client, opts Options) *App {
 	}
 	a.win = fy.NewWindow("bnm")
 	a.win.Resize(fyne.NewSize(1120, 720))
+	// Views may start their first load while being built; hold the UI lock so
+	// any onUI callback they schedule runs only after construction is complete.
+	a.uiMu.Lock()
 	a.buildUI()
+	a.uiMu.Unlock()
 	return a
 }
 
@@ -209,7 +214,18 @@ func (a *App) Start() {
 	})
 	a.refreshAll()
 	a.loadPendingSecrets()
-	go a.streamLoop()
+	a.loops.Add(1)
+	go func() {
+		defer a.loops.Done()
+		a.streamLoop()
+	}()
+}
+
+// Stop cancels background work and waits for the long-lived loops to exit, so
+// nothing schedules UI work after it returns. Tests call it before tearing down.
+func (a *App) Stop() {
+	a.cancel()
+	a.loops.Wait()
 }
 
 // Quit stops background work and exits the app.
