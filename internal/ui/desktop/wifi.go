@@ -307,8 +307,17 @@ func (v *wifiView) renderDetail() {
 		fmtAgo(n.LastSeen),
 	)
 
-	needsPassword := !n.Known && n.Security != core.SecOpen && n.Security != core.SecOWE
+	secured := n.Security != core.SecOpen && n.Security != core.SecOWE
+	// A known network shows the entry too: its saved password may be missing or
+	// rejected (a profile made elsewhere, a router that changed its key), and
+	// typing a new one here re-keys the profile instead of forgetting it first.
+	needsPassword := secured
 	needsUser := !n.Known && n.Security == core.SecWPAEAP
+	if n.Known {
+		v.password.SetPlaceHolder("New password (leave empty to use the saved one)")
+	} else {
+		v.password.SetPlaceHolder("Password")
+	}
 	if n.SSID != v.lastDetail {
 		// a new selection: drop what was typed for the previous one; a mere
 		// rescan must not wipe a password mid-typing
@@ -407,19 +416,25 @@ func (v *wifiView) connect() {
 		return
 	}
 	req := core.ConnectWifiRequest{Device: n.Device, SSID: n.SSID, Hidden: n.Hidden}
+	req.Password = v.password.Text
 	if !n.Known {
-		req.Password = v.password.Text
 		req.Username = v.username.Text
 	}
+	// A known network with nothing typed activates its profile as is; with a
+	// password typed, ConnectWifi re-keys the profile first.
+	useProfile := n.Known && req.Password == ""
 	v.a.bg(func(ctx context.Context) {
 		var err error
-		if n.Known {
+		if useProfile {
 			err = v.a.c.ActivateProfile(ctx, n.ProfileUUID, n.Device)
 		} else {
 			err = v.a.c.ConnectWifi(ctx, req)
 		}
 		v.a.onUI(func() {
 			v.connectBtn.Enable()
+			if err != nil && n.Known && req.Password == "" {
+				err = fmt.Errorf("%w. If the saved password is wrong or missing, type a new one and connect again", err)
+			}
 			v.actErr.set(err)
 			if err == nil {
 				v.password.SetText("")

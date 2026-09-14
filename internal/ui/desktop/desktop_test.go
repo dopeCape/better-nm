@@ -260,9 +260,13 @@ func TestWifiListAndDetail(t *testing.T) {
 	// enterprise networks ask for a username too
 	sel(fake.OfficeSSID)
 	r.ui(func() {
-		// Office is known, so no credentials but the IP form and autoconnect
-		if containsObject(w.detail, w.password) || containsObject(w.detail, w.username) {
-			t.Error("saved network should not ask for credentials")
+		// Office is known: no username, but the password entry stays available so
+		// a rejected or missing saved password can be replaced without forgetting.
+		if containsObject(w.detail, w.username) {
+			t.Error("saved network should not ask for a username")
+		}
+		if !containsObject(w.detail, w.password) || !strings.Contains(w.password.PlaceHolder, "saved") {
+			t.Errorf("saved network should offer a new-password entry, placeholder %q", w.password.PlaceHolder)
 		}
 		if !containsObject(w.detail, w.ipBox) || !containsObject(w.detail, w.autoconnect) {
 			t.Error("saved network should show autoconnect and the IP form")

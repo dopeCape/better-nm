@@ -158,6 +158,14 @@ func (t *wifiTab) key(m *Model, k tea.KeyMsg) tea.Cmd {
 		}
 	case "enter":
 		return t.connect(m)
+	case "p":
+		// New password for a known network (saved one missing or rejected).
+		if n := t.selected(); n != nil && n.Known && secured(n.Security) {
+			return t.connectTo(m, n, true)
+		} else if n != nil {
+			m.setFlash("p only applies to a saved, secured network", false)
+			return m.flashTimer()
+		}
 	case "d":
 		return m.l.action(int(tabWifi), "disconnect", func(ctx context.Context) error {
 			return m.l.c.DisconnectWifi(ctx, t.device())
@@ -204,7 +212,14 @@ func (t *wifiTab) connect(m *Model) tea.Cmd {
 		m.setFlash("already connected to "+n.SSID, false)
 		return m.flashTimer()
 	}
-	if !n.Known && secured(n.Security) {
+	return t.connectTo(m, n, false)
+}
+
+// connectTo joins n. askPassword forces the prompt even for a known network:
+// its saved password may be missing or rejected, and a new one re-keys the
+// profile through ConnectWifi instead of forgetting it first.
+func (t *wifiTab) connectTo(m *Model, n *core.WifiNetwork, askPassword bool) tea.Cmd {
+	if (!n.Known || askPassword) && secured(n.Security) {
 		p := &wifiPrompt{net: *n}
 		if n.Security == core.SecWPAEAP {
 			p.fields = append(p.fields, newInput("username: ", "", 128))
@@ -279,7 +294,7 @@ func (t *wifiTab) hints(m *Model) string {
 	if !m.status.WifiEnabled {
 		w = "wifi on"
 	}
-	return keyHints("enter", "connect", "d", "disconnect", "f", "forget", "r", "rescan", "w", w, "/", "filter")
+	return keyHints("enter", "connect", "p", "password", "d", "disconnect", "f", "forget", "r", "rescan", "w", w, "/", "filter")
 }
 
 func (t *wifiTab) view(m *Model, w, h int) string {

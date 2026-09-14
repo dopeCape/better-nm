@@ -623,7 +623,7 @@ func (m *Model) helpView(w, h int) string {
 		sec("global") + keyHints("1-6", "tabs", "tab / shift-tab", "next / prev tab", "?", "this help"),
 		sec("") + keyHints("e / E", "event log", "q / ctrl-c", "quit"),
 		"",
-		sec("Wi-Fi") + keyHints("enter", "connect", "d", "disconnect", "f", "forget", "r", "rescan"),
+		sec("Wi-Fi") + keyHints("enter", "connect", "p", "new password", "d", "disconnect", "f", "forget", "r", "rescan"),
 		sec("") + keyHints("w", "wifi on/off", "/", "filter", "esc", "clear filter"),
 		sec("Devices") + keyHints("enter", "wired up/down", "x", "expand virtual"),
 		sec("VPN") + keyHints("enter", "connect/disconnect", "a", "add .conf/.ovpn"),
