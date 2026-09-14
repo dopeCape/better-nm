@@ -731,6 +731,10 @@ pub fn merge_patch(text: &str, patch: &Json) -> Result<String, String> {
     for (k, v) in patch {
         let key = Yaml::String(k.clone());
         if k == "custom" {
+            if v.is_null() {
+                map.remove(&key);
+                continue;
+            }
             let Json::Object(sub) = v else {
                 return Err("`custom` must be an object".into());
             };
@@ -784,13 +788,18 @@ pub fn default_path() -> PathBuf {
         .join("config.yaml")
 }
 
+/// Writes through symlinks: dotfile managers (stow, chezmoi, home-manager) link
+/// `config.yaml` to their own tree, and a rename over the link would replace it
+/// with a plain file. The temp file lives beside the real target so the rename is
+/// atomic on the same filesystem.
 fn write_atomic(path: &Path, text: &str) -> Result<(), String> {
     if let Some(dir) = path.parent() {
         std::fs::create_dir_all(dir).map_err(|e| format!("create {}: {e}", dir.display()))?;
     }
-    let tmp = path.with_extension("yaml.tmp");
+    let target = std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
+    let tmp = target.with_extension("yaml.tmp");
     std::fs::write(&tmp, text).map_err(|e| format!("write {}: {e}", tmp.display()))?;
-    std::fs::rename(&tmp, path).map_err(|e| format!("rename to {}: {e}", path.display()))
+    std::fs::rename(&tmp, &target).map_err(|e| format!("rename to {}: {e}", target.display()))
 }
 
 /// The config file plus the last resolved value.
@@ -859,6 +868,35 @@ impl ConfigStore {
     }
 }
 
+/// The directories to watch for `path` and the file names that count inside them:
+/// the file's own directory, plus the directory of the real file when `path` is a
+/// symlink (a dotfile manager's tree), since inotify on the link's directory never
+/// sees writes to the target.
+pub fn watch_targets(path: &Path) -> Result<Vec<(PathBuf, std::ffi::OsString)>, String> {
+    let mut out = Vec::new();
+    let mut push = |p: &Path| -> Result<(), String> {
+        let dir = p
+            .parent()
+            .map(Path::to_path_buf)
+            .ok_or_else(|| format!("{}: no parent directory", p.display()))?;
+        let name = p
+            .file_name()
+            .map(|s| s.to_os_string())
+            .ok_or_else(|| format!("{}: no file name", p.display()))?;
+        if !out.contains(&(dir.clone(), name.clone())) {
+            out.push((dir, name));
+        }
+        Ok(())
+    };
+    push(path)?;
+    if let Ok(real) = std::fs::canonicalize(path) {
+        if real != path {
+            push(&real)?;
+        }
+    }
+    Ok(out)
+}
+
 /// Watches the config file's directory (so editors that write-and-rename still
 /// count) and calls `on_change` at most once per 150 ms burst. Keep the returned
 /// watcher alive.
@@ -866,15 +904,13 @@ pub fn watch(
     path: PathBuf,
     on_change: impl Fn() + Send + 'static,
 ) -> Result<RecommendedWatcher, String> {
-    let dir = path
-        .parent()
-        .map(Path::to_path_buf)
+    let targets = watch_targets(&path)?;
+    let (dir, _) = targets
+        .first()
+        .cloned()
         .ok_or("config path has no parent")?;
     std::fs::create_dir_all(&dir).map_err(|e| format!("create {}: {e}", dir.display()))?;
-    let file_name = path
-        .file_name()
-        .map(|s| s.to_os_string())
-        .ok_or("config path has no file name")?;
+    let names: Vec<std::ffi::OsString> = targets.iter().map(|(_, n)| n.clone()).collect();
     let (tx, rx) = mpsc::channel::<()>();
     let mut watcher =
         notify::recommended_watcher(move |res: notify::Result<notify::Event>| match res {
@@ -887,7 +923,7 @@ pub fn watch(
                 if ev
                     .paths
                     .iter()
-                    .any(|p| p.file_name() == Some(file_name.as_os_str()))
+                    .any(|p| p.file_name().is_some_and(|f| names.iter().any(|n| n == f)))
                 {
                     let _ = tx.send(());
                 }
@@ -895,9 +931,11 @@ pub fn watch(
             Err(e) => warn!(error = %e, "config watcher"),
         })
         .map_err(|e| format!("watcher: {e}"))?;
-    watcher
-        .watch(&dir, RecursiveMode::NonRecursive)
-        .map_err(|e| format!("watch {}: {e}", dir.display()))?;
+    for (d, _) in &targets {
+        watcher
+            .watch(d, RecursiveMode::NonRecursive)
+            .map_err(|e| format!("watch {}: {e}", d.display()))?;
+    }
     std::thread::Builder::new()
         .name("config-debounce".into())
         .spawn(move || {
@@ -908,7 +946,7 @@ pub fn watch(
             }
         })
         .map_err(|e| format!("debounce thread: {e}"))?;
-    info!(dir = %dir.display(), "watching config");
+    info!(dirs = ?targets.iter().map(|(d, _)| d.display().to_string()).collect::<Vec<_>>(), "watching config");
     Ok(watcher)
 }
 
@@ -1236,6 +1274,59 @@ base0F: "a16946"
         // null removes a key
         let merged = merge_patch("theme: nord\nfont: X\n", &json!({"font": null})).unwrap();
         assert!(!merged.contains("font"));
+        // null removes the whole custom map too; a key inside it is removed alone
+        let merged = merge_patch(DEFAULT_FILE, &json!({"custom": null})).unwrap();
+        assert!(!merged.contains("custom"), "{merged}");
+        assert!(parse(&merged).custom.is_empty());
+        let merged = merge_patch(DEFAULT_FILE, &json!({"custom": {"base": null}})).unwrap();
+        let f = parse(&merged);
+        assert!(f.errors.is_empty(), "{:?}", f.errors);
+        assert_eq!(f.custom.len(), 15);
+        assert!(!f.custom.contains_key("base"));
+        // a bad token in the nested patch rejects the whole patch
+        let err = merge_patch(DEFAULT_FILE, &json!({"custom": {"base": "red"}})).unwrap_err();
+        assert!(err.contains("`custom.base`"), "{err}");
+        let err = merge_patch(DEFAULT_FILE, &json!({"custom": {"nope": "#000000"}})).unwrap_err();
+        assert!(err.contains("`custom.nope`"), "{err}");
+        assert!(merge_patch(DEFAULT_FILE, &json!({"custom": 5})).is_err());
+    }
+
+    #[test]
+    fn store_writes_through_a_symlink() {
+        let dir = tempfile::tempdir().unwrap();
+        let real_dir = dir.path().join("dotfiles");
+        std::fs::create_dir_all(&real_dir).unwrap();
+        let real = real_dir.join("bnmdesktop.yaml");
+        std::fs::write(&real, "theme: nord\n").unwrap();
+        let cfg_dir = dir.path().join("config");
+        std::fs::create_dir_all(&cfg_dir).unwrap();
+        let link = cfg_dir.join("config.yaml");
+        std::os::unix::fs::symlink(&real, &link).unwrap();
+
+        let store = ConfigStore::open(link.clone());
+        assert_eq!(store.get().theme, "nord");
+        store.set(&json!({"theme": "dracula"})).unwrap();
+        assert!(
+            std::fs::symlink_metadata(&link)
+                .unwrap()
+                .file_type()
+                .is_symlink(),
+            "the link must survive a write"
+        );
+        assert!(std::fs::read_to_string(&real)
+            .unwrap()
+            .contains("theme: dracula"));
+        assert!(!real_dir.join("bnmdesktop.yaml.tmp").exists());
+
+        // The watcher covers both the link's directory and the target's.
+        let targets = watch_targets(&link).unwrap();
+        assert_eq!(targets.len(), 2);
+        assert_eq!(targets[0].0, cfg_dir);
+        assert_eq!(targets[0].1, "config.yaml");
+        assert_eq!(targets[1].0, std::fs::canonicalize(&real_dir).unwrap());
+        assert_eq!(targets[1].1, "bnmdesktop.yaml");
+        // A plain file watches one directory.
+        assert_eq!(watch_targets(&real).unwrap().len(), 1);
     }
 
     #[test]
