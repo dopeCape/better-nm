@@ -307,10 +307,32 @@ func (a *app) runWithPrompts(ctx context.Context, c *client.Client, o promptOpts
 	errc := make(chan error, 1)
 	go func() { errc <- do(rctx) }()
 	seen := map[string]bool{}
+	handled := map[string]bool{}
+	// The stream subscription and the request race: a prompt raised before the
+	// daemon registered this subscriber never arrives as an event, so pending
+	// prompts are also polled. Whichever path sees a request first handles it.
+	poll := time.NewTicker(400 * time.Millisecond)
+	defer poll.Stop()
 	for {
+		var req core.SecretRequest
 		select {
 		case err := <-errc:
 			return err
+		case <-poll.C:
+			pending, err := c.PendingSecrets(ctx)
+			if err != nil {
+				continue
+			}
+			found := false
+			for _, p := range pending {
+				if !handled[p.ID] && o.match(p) {
+					req, found = p, true
+					break
+				}
+			}
+			if !found {
+				continue
+			}
 		case item, ok := <-stream:
 			if !ok {
 				return <-errc
@@ -318,10 +340,14 @@ func (a *app) runWithPrompts(ctx context.Context, c *client.Client, o promptOpts
 			if item.Event == nil || item.Event.Type != core.EventSecretNeeded {
 				continue
 			}
-			req, err := c.Secret(ctx, item.Event.Data["request_id"])
-			if err != nil || !o.match(req) {
+			var err error
+			req, err = c.Secret(ctx, item.Event.Data["request_id"])
+			if err != nil || handled[req.ID] || !o.match(req) {
 				continue
 			}
+		}
+		handled[req.ID] = true
+		{
 			retry := req.RequestNew || seen[req.SettingName]
 			seen[req.SettingName] = true
 			err, gaveUp := a.answerPrompt(ctx, c, req, &o, retry)

@@ -21,7 +21,7 @@
           pname = "bnm";
           inherit version;
           src = ./.;
-          vendorHash = "sha256-8wVUACQmudCNl7FBrh/qpST7b2NpPVidhEql3rUhRak=";
+          vendorHash = "sha256-VSDMLbo73ludnsOFQS95Xn4iwETDWFwenINPkef23qg=";
           subPackages = [ "cmd/bnm" "cmd/bnmd" ];
           env.CGO_ENABLED = 0;
           ldflags = [ "-s" "-w" "-X github.com/dopeCape/better-nm/internal/version.Version=${version}" ];
