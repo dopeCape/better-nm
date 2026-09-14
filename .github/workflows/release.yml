@@ -30,8 +30,9 @@ jobs:
 
   # The Tauri desktop app, built natively per arch on the oldest supported LTS so the
   # AppImage's glibc floor stays low. Uploads AppImage, deb and rpm to the release that
-  # goreleaser created. The bundle version comes from the tag: tauri.conf.json keeps
-  # 0.1.0 in git and `--config '{"version": ...}'` overrides it at build time.
+  # goreleaser created. The version comes from the tag: tauri.conf.json has no version
+  # key, so bundle names and CARGO_PKG_VERSION both follow src-tauri/Cargo.toml, which
+  # is rewritten from the tag here (0.1.0 in git). Cargo updates its own Cargo.lock entry.
   desktop:
     needs: goreleaser
     strategy:
@@ -64,8 +65,10 @@ jobs:
       - name: Build bundles (AppImage, deb, rpm)
         run: |
           version="${GITHUB_REF_NAME#v}"
+          sed -i "0,/^version = \".*\"$/s//version = \"${version}\"/" src-tauri/Cargo.toml
+          grep -n '^version' src-tauri/Cargo.toml
           pnpm install --frozen-lockfile
-          pnpm tauri build --config "{\"version\":\"${version}\"}"
+          pnpm tauri build
           ls -l src-tauri/target/release/bundle/appimage/*.AppImage src-tauri/target/release/bundle/deb/*.deb src-tauri/target/release/bundle/rpm/*.rpm
       - name: Upload to release
         env:
