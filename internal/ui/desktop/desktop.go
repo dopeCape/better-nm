@@ -158,6 +158,12 @@ type App struct {
 	eventsMu sync.Mutex
 	events   []core.Event
 	offline  bool
+
+	// Secret prompts (UI thread only): the open dialog, the ones behind it
+	// and every id shown or queued so a late event is not a duplicate.
+	secret      *secretPrompt
+	secretQueue []core.SecretRequest
+	secretKnown map[string]bool
 }
 
 // New builds the window and views; nothing is fetched until Run (or, in
@@ -166,7 +172,7 @@ func New(fy fyne.App, c *client.Client, opts Options) *App {
 	if opts.Logger == nil {
 		opts.Logger = slog.Default()
 	}
-	a := &App{fy: fy, c: c, log: opts.Logger, opts: opts}
+	a := &App{fy: fy, c: c, log: opts.Logger, opts: opts, secretKnown: map[string]bool{}}
 	a.idleCond = sync.NewCond(&a.idleMu)
 	a.ctx, a.cancel = context.WithCancel(context.Background())
 	fy.Settings().SetTheme(newTheme())
@@ -202,6 +208,7 @@ func (a *App) Start() {
 		a.Quit()
 	})
 	a.refreshAll()
+	a.loadPendingSecrets()
 	go a.streamLoop()
 }
 
@@ -383,6 +390,7 @@ func (a *App) streamLoop() {
 		if a.offlineNow() {
 			a.setOffline(false)
 			a.refreshAll()
+			a.loadPendingSecrets()
 		}
 		backoff = time.Second
 		for it := range ch {
@@ -415,6 +423,9 @@ func (a *App) onChange(ch core.Change) {
 func (a *App) onEvent(e core.Event) {
 	if e.Type == core.EventWifiScan || e.Type == core.EventStateChanged {
 		return
+	}
+	if e.Type == core.EventSecretNeeded || e.Type == core.EventSecretResolved {
+		a.onSecretEvent(e)
 	}
 	a.eventsMu.Lock()
 	a.events = append(a.events, e)

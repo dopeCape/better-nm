@@ -34,6 +34,7 @@ type trayState struct {
 	wifiHW     bool
 	vpns       []core.VPN
 	verdict    string
+	secret     string // "Password needed for …" while a request is pending
 }
 
 // tray owns the StatusNotifierItem menu; every change rebuilds it.
@@ -67,6 +68,15 @@ func (t *tray) setStatus(hs headerState) {
 	t.desk.SetSystemTrayMenu(t.menu(st))
 }
 
+// setSecret sets (or with "" clears) the pending-password entry (UI thread).
+func (t *tray) setSecret(label string) {
+	t.mu.Lock()
+	t.st.secret = label
+	st := t.st
+	t.mu.Unlock()
+	t.desk.SetSystemTrayMenu(t.menu(st))
+}
+
 // refresh reloads the VPN list off-thread and rebuilds the menu.
 func (t *tray) refresh() {
 	t.a.bg(func(ctx context.Context) {
@@ -87,7 +97,11 @@ func (t *tray) refresh() {
 func (t *tray) menu(st trayState) *fyne.Menu {
 	conn := fyne.NewMenuItem(st.connection, nil)
 	conn.Disabled = true
-	items := []*fyne.MenuItem{conn, fyne.NewMenuItemSeparator()}
+	items := []*fyne.MenuItem{conn}
+	if st.secret != "" {
+		items = append(items, fyne.NewMenuItem(st.secret, t.a.focusSecret))
+	}
+	items = append(items, fyne.NewMenuItemSeparator())
 
 	wifiOn := st.wifiOn
 	wifi := fyne.NewMenuItem("Wi-Fi", func() {

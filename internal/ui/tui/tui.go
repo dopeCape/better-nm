@@ -112,6 +112,7 @@ type Model struct {
 	monitor monitorTab
 	speed   speedTab
 	diag    diagTab
+	secrets secretsState
 
 	now      func() time.Time
 	flashTTL time.Duration
@@ -150,6 +151,7 @@ func New(ctx context.Context, c *client.Client) *Model {
 	m.wifi.init()
 	m.vpn.init()
 	m.diag.init()
+	m.secrets.init()
 	return m
 }
 
@@ -178,6 +180,7 @@ func (m *Model) Init() tea.Cmd {
 		m.l.vpns(),
 		m.l.monitor(),
 		m.l.eventHistory(),
+		m.l.pendingSecrets(),
 		m.pane(m.tab).load(m),
 		m.l.openStream(),
 	)
@@ -248,6 +251,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		cmd := m.pane(tab(msg.tab)).update(m, msg)
 		return m, tea.Batch(cmd, m.flashTimer())
+	case pendingSecretsMsg, secretMsg, secretAnsweredMsg, secretCancelledMsg, secretTickMsg:
+		return m, m.secrets.update(m, msg)
 	}
 	// Data messages go to their owners; some feed two tabs.
 	var cmds []tea.Cmd
@@ -275,6 +280,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m *Model) key(k tea.KeyMsg) tea.Cmd {
 	if k.Type == tea.KeyCtrlC {
 		return tea.Quit
+	}
+	if m.secrets.open() { // a password prompt is modal
+		return m.secrets.key(m, k)
 	}
 	if m.over != overlayNone {
 		switch k.String() {
@@ -347,9 +355,22 @@ func (m *Model) flashTimer() tea.Cmd {
 // onStreamItem folds one live item in: Changes are coalesced, Events are
 // logged and mapped to the data they invalidate.
 func (m *Model) onStreamItem(item client.StreamItem) tea.Cmd {
+	cmd := m.foldStreamItem(item)
+	if len(m.st.pending) > 0 && !m.st.debouncin {
+		m.st.debouncin = true
+		return tea.Batch(cmd, debounce())
+	}
+	return cmd
+}
+
+// foldStreamItem notes what the item invalidates and returns the immediate
+// work it needs (fetching a secret request); the debounced reloads are
+// onStreamItem's.
+func (m *Model) foldStreamItem(item client.StreamItem) tea.Cmd {
 	if c := item.Change; c != nil {
 		m.st.note(c.Kind)
 	}
+	var cmd tea.Cmd
 	if e := item.Event; e != nil {
 		ev := *e
 		m.events = append(m.events, ev)
@@ -367,13 +388,15 @@ func (m *Model) onStreamItem(item client.StreamItem) tea.Cmd {
 			m.st.note(core.ChangeMonitor)
 		case core.EventWifiScan:
 			m.st.note(core.ChangeWifi)
+		case core.EventSecretNeeded:
+			if id := e.Data["request_id"]; id != "" {
+				cmd = m.l.secret(id)
+			}
+		case core.EventSecretResolved:
+			cmd = m.secrets.resolved(m, e.Data["request_id"], core.SecretOutcome(e.Data["outcome"]))
 		}
 	}
-	if len(m.st.pending) > 0 && !m.st.debouncin {
-		m.st.debouncin = true
-		return debounce()
-	}
-	return nil
+	return cmd
 }
 
 // loadsFor maps coalesced change kinds to the minimal set of reloads.
@@ -427,7 +450,7 @@ func (m *Model) loadsFor(kinds map[core.ChangeKind]struct{}) tea.Cmd {
 
 // reloadAll refreshes the summaries and the current tab (after a reconnect).
 func (m *Model) reloadAll() tea.Cmd {
-	return tea.Batch(m.l.status(), m.l.vpns(), m.l.monitor(), m.pane(m.tab).load(m))
+	return tea.Batch(m.l.status(), m.l.vpns(), m.l.monitor(), m.l.pendingSecrets(), m.pane(m.tab).load(m))
 }
 
 func (s *stream) nextBackoff() time.Duration {
@@ -485,6 +508,9 @@ func (m *Model) View() string {
 		sep := strings.TrimRight(strings.Repeat(stDim.Render("│")+"\n", bodyH), "\n")
 		p := clampBox(m.pane(m.tab).view(m, paneW, bodyH), paneW, bodyH)
 		body = lipgloss.JoinHorizontal(lipgloss.Top, rail, sep, p)
+	}
+	if m.secrets.open() {
+		body = overlayBox(body, m.secrets.view(m, m.width), m.width, bodyH)
 	}
 	return m.statusBar() + "\n" + clampLines(body, bodyH) + "\n" + m.footer()
 }
@@ -549,6 +575,9 @@ func (m *Model) statusBar() string {
 		mon = "paused"
 	}
 	parts = append(parts, stBar.Render("monitor ")+barStateStyle(mon).Render(mon))
+	if n := m.secrets.pending(); n > 0 {
+		parts = append(parts, stBarWarn.Render(fmt.Sprintf("secrets %d", n)))
+	}
 	left := strings.Join(parts, stBar.Render("  "))
 
 	var right string
@@ -594,6 +623,10 @@ func (m *Model) footer() string {
 	}
 	if m.over == overlayNone && m.pane(m.tab).capturing() {
 		// a text input has the keys: q, ?, e would be typed, not acted on
+		globals = keyHints("ctrl-c", "quit")
+	}
+	if m.secrets.open() {
+		hints = m.secrets.hints()
 		globals = keyHints("ctrl-c", "quit")
 	}
 	left := " " + hints + "  " + globals
