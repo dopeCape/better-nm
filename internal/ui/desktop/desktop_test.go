@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"net"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -23,17 +25,20 @@ import (
 )
 
 // rig is an in-process bnmd (fake backends) behind the real API server and
-// client, plus the desktop App on Fyne's test driver.
+// client, plus the desktop App on Fyne's test driver. The secret-agent routes
+// are not in internal/api yet: secretRoutes serves them in front of the real
+// server from the fake broker.
 type rig struct {
-	t     *testing.T
-	a     *App
-	c     *client.Client
-	d     *daemon.Daemon
-	nm    *fake.NM
-	ts    *fake.VPNAdapter
-	mon   *fake.Monitor
-	speed *fake.SpeedTester
-	notif *fake.Notifier
+	t       *testing.T
+	a       *App
+	c       *client.Client
+	d       *daemon.Daemon
+	nm      *fake.NM
+	ts      *fake.VPNAdapter
+	mon     *fake.Monitor
+	speed   *fake.SpeedTester
+	notif   *fake.Notifier
+	secrets *fake.SecretBroker
 }
 
 func shortTempDir(t *testing.T) string {
@@ -48,7 +53,8 @@ func shortTempDir(t *testing.T) string {
 
 func newRig(t *testing.T) *rig {
 	t.Helper()
-	r := &rig{t: t, nm: fake.NewNM(), ts: fake.NewTailscale(), mon: fake.NewMonitor(), speed: fake.NewSpeedTester(), notif: fake.NewNotifier()}
+	r := &rig{t: t, nm: fake.NewNM(), ts: fake.NewTailscale(), mon: fake.NewMonitor(), speed: fake.NewSpeedTester(), notif: fake.NewNotifier(), secrets: fake.NewSecretBroker()}
+	r.secrets.Notify = r.mon.Emit
 	dir := shortTempDir(t)
 	socket := filepath.Join(dir, "bnmd.sock")
 	t.Setenv("XDG_STATE_HOME", dir)
@@ -82,7 +88,17 @@ func newRig(t *testing.T) *rig {
 	serveDone := make(chan error, 1)
 	go func() { runDone <- d.Run(ctx) }()
 	srv := api.New(d, api.WithLogger(slog.New(slog.DiscardHandler)), api.WithHeartbeat(40*time.Millisecond))
-	go func() { serveDone <- srv.Serve(ctx, sock.Listener()) }()
+	hs := &http.Server{
+		Handler:     secretRoutes(r.secrets, srv),
+		BaseContext: func(net.Listener) context.Context { return ctx },
+	}
+	go func() {
+		err := hs.Serve(sock.Listener())
+		if errors.Is(err, http.ErrServerClosed) {
+			err = nil
+		}
+		serveDone <- err
+	}()
 
 	c, err := client.New(client.WithSocket(socket), client.WithAutoStart(false))
 	if err != nil {
@@ -105,6 +121,9 @@ func newRig(t *testing.T) *rig {
 		r.a.waitIdle(5 * time.Second)
 		c.Close()
 		cancel()
+		sctx, scancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer scancel()
+		_ = hs.Shutdown(sctx)
 		for _, ch := range []chan error{runDone, serveDone} {
 			select {
 			case <-ch:

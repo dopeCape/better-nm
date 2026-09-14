@@ -3,7 +3,10 @@ package tui
 import (
 	"bytes"
 	"context"
+	"errors"
 	"log/slog"
+	"net"
+	"net/http"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -24,20 +27,24 @@ import (
 	"github.com/dopeCape/better-nm/internal/fake"
 )
 
-// rig is a real daemon + API server over a temp socket, backed by fakes.
+// rig is a real daemon + API server over a temp socket, backed by fakes. The
+// secret-agent routes are not in internal/api yet: secretRoutes serves them
+// in front of the real server from the fake broker.
 type rig struct {
-	t     *testing.T
-	c     *client.Client
-	nm    *fake.NM
-	ts    *fake.VPNAdapter
-	mon   *fake.Monitor
-	store *fake.Store
-	speed *fake.SpeedTester
+	t       *testing.T
+	c       *client.Client
+	nm      *fake.NM
+	ts      *fake.VPNAdapter
+	mon     *fake.Monitor
+	store   *fake.Store
+	speed   *fake.SpeedTester
+	secrets *fake.SecretBroker
 }
 
 func newRig(t *testing.T) *rig {
 	t.Helper()
-	r := &rig{t: t, nm: fake.NewNM(), ts: fake.NewTailscale(), mon: fake.NewMonitor(), store: fake.NewStore(), speed: fake.NewSpeedTester()}
+	r := &rig{t: t, nm: fake.NewNM(), ts: fake.NewTailscale(), mon: fake.NewMonitor(), store: fake.NewStore(), speed: fake.NewSpeedTester(), secrets: fake.NewSecretBroker()}
+	r.secrets.Notify = r.mon.Emit
 	dir, err := os.MkdirTemp("", "bnmtui") // short: Unix socket paths are capped
 	if err != nil {
 		t.Fatal(err)
@@ -73,9 +80,22 @@ func newRig(t *testing.T) *rig {
 	serveDone := make(chan error, 1)
 	go func() { runDone <- d.Run(ctx) }()
 	srv := api.New(d, api.WithLogger(slog.New(slog.DiscardHandler)), api.WithHeartbeat(40*time.Millisecond))
-	go func() { serveDone <- srv.Serve(ctx, sock.Listener()) }()
+	hs := &http.Server{
+		Handler:     secretRoutes(r.secrets, srv),
+		BaseContext: func(net.Listener) context.Context { return ctx },
+	}
+	go func() {
+		err := hs.Serve(sock.Listener())
+		if errors.Is(err, http.ErrServerClosed) {
+			err = nil
+		}
+		serveDone <- err
+	}()
 	t.Cleanup(func() {
 		cancel()
+		sctx, scancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer scancel()
+		_ = hs.Shutdown(sctx)
 		for _, ch := range []chan error{runDone, serveDone} {
 			select {
 			case err := <-ch:
@@ -116,6 +136,7 @@ func newHarness(t *testing.T, r *rig, w, h int) *harness {
 	cursorMode = cursor.CursorStatic
 	m := New(ctx, r.c)
 	m.flashTTL = time.Millisecond
+	m.secrets.tick = time.Millisecond
 	hz := &harness{t: t, r: r, m: m, cancel: cancel}
 	hz.feed(tea.WindowSizeMsg{Width: w, Height: h})
 	hz.run(m.Init())
@@ -145,6 +166,8 @@ func (h *harness) feed(msg tea.Msg) {
 		h.quit = true
 		return
 	case flashExpireMsg: // keep flashes visible for assertions
+		return
+	case secretTickMsg: // the countdown would re-arm forever
 		return
 	case streamOpenMsg:
 		h.stream = v.ch
@@ -225,9 +248,9 @@ func (h *harness) pump(timeout time.Duration, pred func(client.StreamItem) bool)
 
 // onStreamItemForTest folds the item in without arming the real debounce timer.
 func (m *Model) onStreamItemForTest(item client.StreamItem) tea.Cmd {
-	m.onStreamItem(item)
+	cmd := m.foldStreamItem(item)
 	m.st.debouncin = true // pump flushes with an explicit debounceMsg
-	return nil
+	return cmd
 }
 
 func (h *harness) view() string { return h.m.View() }
