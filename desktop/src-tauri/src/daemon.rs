@@ -132,31 +132,95 @@ fn is_executable(p: &Path) -> bool {
 }
 
 fn look_path(name: &str) -> Option<PathBuf> {
-    let path = env_nonempty("PATH")?;
-    std::env::split_paths(&path)
+    look_path_in(name, &env_nonempty("PATH")?, None)
+}
+
+/// `PATH` lookup, skipping directories under `exclude` (the AppImage mount).
+fn look_path_in(name: &str, path: &str, exclude: Option<&Path>) -> Option<PathBuf> {
+    std::env::split_paths(path)
+        .filter(|d| !exclude.is_some_and(|x| d.starts_with(x)))
         .map(|d| d.join(name))
         .find(|c| is_executable(c))
 }
 
-/// Locates bnmd like `client.FindDaemon`: `BNM_DAEMON`, next to this executable, `$PATH`.
-pub fn find_daemon() -> Result<PathBuf, String> {
-    if let Some(v) = env_nonempty("BNM_DAEMON") {
-        return Ok(PathBuf::from(v));
-    }
-    if let Ok(exe) = std::env::current_exe() {
-        let exe = std::fs::canonicalize(&exe).unwrap_or(exe);
-        if let Some(dir) = exe.parent() {
-            let cand = dir.join(DAEMON_BINARY);
-            if is_executable(&cand) {
-                return Ok(cand);
-            }
+/// Where the app runs from, as far as bnmd lookup cares.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Whereabouts {
+    /// `BNM_DAEMON`.
+    pub explicit: Option<PathBuf>,
+    /// This executable (symlinks resolved).
+    pub exe: Option<PathBuf>,
+    /// `APPIMAGE`: the AppImage file, when the app runs from one.
+    pub appimage: Option<PathBuf>,
+    /// `APPDIR`: the squashfs mount the AppImage runtime made; gone when the app exits.
+    pub appdir: Option<PathBuf>,
+    /// `PATH`.
+    pub path: String,
+}
+
+impl Whereabouts {
+    pub fn from_env() -> Self {
+        Whereabouts {
+            explicit: env_nonempty("BNM_DAEMON").map(PathBuf::from),
+            exe: std::env::current_exe()
+                .ok()
+                .map(|e| std::fs::canonicalize(&e).unwrap_or(e)),
+            appimage: env_nonempty("APPIMAGE").map(PathBuf::from),
+            appdir: env_nonempty("APPDIR").map(PathBuf::from),
+            path: env_nonempty("PATH").unwrap_or_default(),
         }
     }
-    look_path(DAEMON_BINARY).ok_or_else(|| {
-        format!(
-            "{DAEMON_BINARY} not found next to the app or in PATH; install bnm (which ships bnmd)"
-        )
-    })
+
+    /// The AppImage mount, when running from one: `APPDIR`, else the directory
+    /// tree the executable was loaded from (`/tmp/.mount_xxx/usr/bin/bnm-desktop`).
+    fn mount(&self) -> Option<PathBuf> {
+        self.appimage.as_ref()?;
+        if let Some(d) = &self.appdir {
+            return Some(d.clone());
+        }
+        // <mount>/usr/bin/<exe>
+        self.exe
+            .as_ref()
+            .and_then(|e| e.ancestors().nth(3))
+            .map(Path::to_path_buf)
+    }
+
+    /// Whether `p` lives inside the AppImage mount.
+    pub fn inside_appimage(&self, p: &Path) -> bool {
+        self.mount().is_some_and(|m| p.starts_with(&m))
+    }
+
+    /// Locates bnmd like `client.FindDaemon`: `BNM_DAEMON`, next to this executable,
+    /// `$PATH`. From an AppImage "next to the executable" means next to the
+    /// AppImage file, and the mounted squashfs is never a candidate: a daemon
+    /// started from it outlives the app, and so does a systemd unit pointing at
+    /// it, but the mount does not.
+    pub fn find_daemon(&self) -> Result<PathBuf, String> {
+        if let Some(p) = &self.explicit {
+            return Ok(p.clone());
+        }
+        let mount = self.mount();
+        let beside = match (&self.appimage, &self.exe) {
+            (Some(ai), _) => ai.parent().map(|d| d.join(DAEMON_BINARY)),
+            (None, Some(exe)) => exe.parent().map(|d| d.join(DAEMON_BINARY)),
+            (None, None) => None,
+        };
+        if let Some(c) = beside.filter(|c| is_executable(c)) {
+            return Ok(c);
+        }
+        look_path_in(DAEMON_BINARY, &self.path, mount.as_deref()).ok_or_else(|| {
+            if self.appimage.is_some() {
+                format!("{DAEMON_BINARY} not found next to the AppImage or in PATH; install bnm (which ships bnmd)")
+            } else {
+                format!("{DAEMON_BINARY} not found next to the app or in PATH; install bnm (which ships bnmd)")
+            }
+        })
+    }
+}
+
+/// `Whereabouts::from_env().find_daemon()`.
+pub fn find_daemon() -> Result<PathBuf, String> {
+    Whereabouts::from_env().find_daemon()
 }
 
 // --- process control ---------------------------------------------------------------
@@ -319,6 +383,18 @@ pub async fn unit_state() -> String {
     }
 }
 
+/// A path as a systemd `ExecStart=` argument: quoted when it needs to be.
+pub fn exec_start_arg(bin: &Path) -> String {
+    let s = bin.display().to_string();
+    if s.chars()
+        .any(|c| c.is_whitespace() || c == '"' || c == '\\')
+    {
+        format!("\"{}\"", s.replace('\\', "\\\\").replace('"', "\\\""))
+    } else {
+        s
+    }
+}
+
 /// The unit file `bnm daemon install` writes.
 pub fn unit_file(bin: &Path) -> String {
     format!(
@@ -336,7 +412,7 @@ Slice=background.slice\n\
 \n\
 [Install]\n\
 WantedBy=default.target\n",
-        bin.display()
+        exec_start_arg(bin)
     )
 }
 
@@ -650,8 +726,17 @@ impl Client {
     /// `bnm daemon install`: write the user unit, daemon-reload, enable --now.
     pub async fn install(&self) -> Result<(), String> {
         let _guard = self.lifecycle.lock().await;
-        let bin = find_daemon()?;
+        let here = Whereabouts::from_env();
+        let bin = here.find_daemon()?;
         let bin = std::fs::canonicalize(&bin).unwrap_or(bin);
+        // BNM_DAEMON can still name a binary inside the mount; a unit pointing
+        // there breaks as soon as the AppImage exits.
+        if here.inside_appimage(&bin) {
+            return Err(format!(
+                "refusing to write a unit for {}: it lives inside the AppImage mount, which is gone once the app exits; put bnmd next to the AppImage or on PATH",
+                bin.display()
+            ));
+        }
         let path = unit_path();
         if let Some(dir) = path.parent() {
             std::fs::create_dir_all(dir).map_err(|e| format!("create {}: {e}", dir.display()))?;
@@ -838,6 +923,88 @@ mod tests {
         let u = unit_file(Path::new("/opt/bnm/bnmd"));
         assert!(u.contains("ExecStart=/opt/bnm/bnmd\n"));
         assert!(u.contains("WantedBy=default.target"));
+        // A path with a space is quoted for systemd.
+        let u = unit_file(Path::new("/home/u/My Apps/bnmd"));
+        assert!(u.contains("ExecStart=\"/home/u/My Apps/bnmd\"\n"), "{u}");
+        assert_eq!(exec_start_arg(Path::new("/a/b\"c")), "\"/a/b\\\"c\"");
+    }
+
+    fn exe_at(dir: &Path, name: &str) -> PathBuf {
+        let p = dir.join(name);
+        std::fs::write(&p, "#!/bin/sh\n").unwrap();
+        std::fs::set_permissions(&p, std::fs::Permissions::from_mode(0o755)).unwrap();
+        p
+    }
+
+    #[test]
+    fn find_daemon_outside_an_appimage() {
+        let dir = tempfile::tempdir().unwrap();
+        let app = dir.path().join("app");
+        let on_path = dir.path().join("bin");
+        std::fs::create_dir_all(&app).unwrap();
+        std::fs::create_dir_all(&on_path).unwrap();
+        let exe = exe_at(&app, "bnm-desktop");
+        let mut w = Whereabouts {
+            exe: Some(exe),
+            path: on_path.display().to_string(),
+            ..Default::default()
+        };
+        assert!(w
+            .find_daemon()
+            .unwrap_err()
+            .contains("not found next to the app"));
+        let path_bnmd = exe_at(&on_path, DAEMON_BINARY);
+        assert_eq!(w.find_daemon().unwrap(), path_bnmd);
+        // Next to the executable wins over PATH.
+        let beside = exe_at(&app, DAEMON_BINARY);
+        assert_eq!(w.find_daemon().unwrap(), beside);
+        // BNM_DAEMON wins over everything and is not checked.
+        w.explicit = Some(PathBuf::from("/nowhere/bnmd"));
+        assert_eq!(w.find_daemon().unwrap(), PathBuf::from("/nowhere/bnmd"));
+        assert!(!w.inside_appimage(&beside));
+    }
+
+    #[test]
+    fn find_daemon_never_picks_the_appimage_mount() {
+        let dir = tempfile::tempdir().unwrap();
+        // The AppImage file in ~/Apps, its runtime mount under /tmp/.mount_x.
+        let apps = dir.path().join("Apps");
+        let mount = dir.path().join(".mount_bnmXYZ");
+        let mount_bin = mount.join("usr").join("bin");
+        let on_path = dir.path().join("bin");
+        for d in [&apps, &mount_bin, &on_path] {
+            std::fs::create_dir_all(d).unwrap();
+        }
+        let appimage = apps.join("bnm-desktop.AppImage");
+        std::fs::write(&appimage, "").unwrap();
+        let exe = exe_at(&mount_bin, "bnm-desktop");
+        let bundled = exe_at(&mount_bin, DAEMON_BINARY);
+        // The runtime prepends the mount's bin to PATH.
+        let path = format!("{}:{}", mount_bin.display(), on_path.display());
+        let mut w = Whereabouts {
+            exe: Some(exe.clone()),
+            appimage: Some(appimage.clone()),
+            appdir: Some(mount.clone()),
+            path: path.clone(),
+            ..Default::default()
+        };
+        // Only the bundled copy exists: refuse, with the AppImage wording.
+        let err = w.find_daemon().unwrap_err();
+        assert!(err.contains("next to the AppImage"), "{err}");
+        assert!(w.inside_appimage(&bundled));
+        // On PATH outside the mount: found.
+        let path_bnmd = exe_at(&on_path, DAEMON_BINARY);
+        assert_eq!(w.find_daemon().unwrap(), path_bnmd);
+        // Next to the AppImage file beats PATH.
+        let beside = exe_at(&apps, DAEMON_BINARY);
+        assert_eq!(w.find_daemon().unwrap(), beside);
+        assert!(!w.inside_appimage(&beside));
+        // Without APPDIR the mount is inferred from the executable's location.
+        w.appdir = None;
+        assert!(w.inside_appimage(&bundled));
+        std::fs::remove_file(&beside).unwrap();
+        std::fs::remove_file(&path_bnmd).unwrap();
+        assert!(w.find_daemon().is_err(), "the bundled copy is never used");
     }
 
     #[test]
