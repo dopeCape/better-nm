@@ -44,7 +44,6 @@ type rig struct {
 func newRig(t *testing.T) *rig {
 	t.Helper()
 	r := &rig{t: t, nm: fake.NewNM(), ts: fake.NewTailscale(), mon: fake.NewMonitor(), store: fake.NewStore(), speed: fake.NewSpeedTester(), secrets: fake.NewSecretBroker()}
-	r.secrets.Notify = r.mon.Emit
 	dir, err := os.MkdirTemp("", "bnmtui") // short: Unix socket paths are capped
 	if err != nil {
 		t.Fatal(err)
@@ -54,6 +53,7 @@ func newRig(t *testing.T) *rig {
 	t.Setenv("XDG_STATE_HOME", dir)
 	d, err := daemon.New(daemon.Options{
 		NM:                r.nm,
+		Secrets:           r.secrets,
 		VPN:               fake.NewVPNRegistry(r.ts, fake.NewWireGuard(), fake.NewNMVPN()),
 		Monitor:           r.mon,
 		Store:             r.store,
@@ -81,7 +81,7 @@ func newRig(t *testing.T) *rig {
 	go func() { runDone <- d.Run(ctx) }()
 	srv := api.New(d, api.WithLogger(slog.New(slog.DiscardHandler)), api.WithHeartbeat(40*time.Millisecond))
 	hs := &http.Server{
-		Handler:     secretRoutes(r.secrets, srv),
+		Handler:     srv,
 		BaseContext: func(net.Listener) context.Context { return ctx },
 	}
 	go func() {

@@ -2,68 +2,15 @@ package desktop
 
 import (
 	"context"
-	"encoding/json"
-	"net/http"
 	"strings"
 	"testing"
 	"time"
 
 	"fyne.io/fyne/v2/test"
 
-	"github.com/dopeCape/better-nm/internal/api"
 	"github.com/dopeCape/better-nm/internal/core"
 	"github.com/dopeCape/better-nm/internal/fake"
 )
-
-// secretRoutes serves the four secret-agent routes from the fake broker in
-// front of the real API server, until internal/api grows them.
-func secretRoutes(b *fake.SecretBroker, rest http.Handler) http.Handler {
-	mux := http.NewServeMux()
-	reply := func(w http.ResponseWriter, status int, v any) {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(status)
-		_ = json.NewEncoder(w).Encode(v)
-	}
-	fail := func(w http.ResponseWriter, err error) { reply(w, api.StatusFor(err), api.ErrorBody(err)) }
-	mux.HandleFunc("GET "+api.Prefix+"/secrets", func(w http.ResponseWriter, r *http.Request) {
-		reqs, _ := b.Pending(r.Context())
-		if reqs == nil {
-			reqs = []core.SecretRequest{}
-		}
-		reply(w, http.StatusOK, reqs)
-	})
-	mux.HandleFunc("GET "+api.Prefix+"/secrets/{id}", func(w http.ResponseWriter, r *http.Request) {
-		reqs, _ := b.Pending(r.Context())
-		for _, req := range reqs {
-			if req.ID == r.PathValue("id") {
-				reply(w, http.StatusOK, req)
-				return
-			}
-		}
-		fail(w, core.Errorf(core.KindNotFound, "", "secret request %s is not pending", r.PathValue("id")))
-	})
-	mux.HandleFunc("POST "+api.Prefix+"/secrets/{id}", func(w http.ResponseWriter, r *http.Request) {
-		var a core.SecretAnswer
-		if err := json.NewDecoder(r.Body).Decode(&a); err != nil {
-			fail(w, core.Errorf(core.KindInvalid, "", "bad body: %v", err))
-			return
-		}
-		if err := b.Answer(r.Context(), r.PathValue("id"), a); err != nil {
-			fail(w, err)
-			return
-		}
-		reply(w, http.StatusOK, api.OKResponse{OK: true})
-	})
-	mux.HandleFunc("POST "+api.Prefix+"/secrets/{id}/cancel", func(w http.ResponseWriter, r *http.Request) {
-		if err := b.Cancel(r.Context(), r.PathValue("id")); err != nil {
-			fail(w, err)
-			return
-		}
-		reply(w, http.StatusOK, api.OKResponse{OK: true})
-	})
-	mux.Handle("/", rest)
-	return mux
-}
 
 func wifiSecret(id, ssid string, wrong bool) core.SecretRequest {
 	return core.SecretRequest{

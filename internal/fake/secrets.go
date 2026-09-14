@@ -168,3 +168,8 @@ func (b *SecretBroker) Outcome(id string) (core.SecretOutcome, bool) {
 }
 
 var _ core.SecretBroker = (*SecretBroker)(nil)
+
+// Expire resolves id as timed out, as if nobody answered before ExpiresAt.
+func (b *SecretBroker) Expire(id string) {
+	_ = b.finish(id, core.SecretTimeout, nil)
+}

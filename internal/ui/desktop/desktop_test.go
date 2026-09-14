@@ -54,13 +54,13 @@ func shortTempDir(t *testing.T) string {
 func newRig(t *testing.T) *rig {
 	t.Helper()
 	r := &rig{t: t, nm: fake.NewNM(), ts: fake.NewTailscale(), mon: fake.NewMonitor(), speed: fake.NewSpeedTester(), notif: fake.NewNotifier(), secrets: fake.NewSecretBroker()}
-	r.secrets.Notify = r.mon.Emit
 	dir := shortTempDir(t)
 	socket := filepath.Join(dir, "bnmd.sock")
 	t.Setenv("XDG_STATE_HOME", dir)
 	t.Setenv("XDG_CONFIG_HOME", dir)
 	d, err := daemon.New(daemon.Options{
 		NM:                r.nm,
+		Secrets:           r.secrets,
 		VPN:               fake.NewVPNRegistry(r.ts, fake.NewWireGuard(), fake.NewNMVPN()),
 		Monitor:           r.mon,
 		Store:             fake.NewStore(),
@@ -89,7 +89,7 @@ func newRig(t *testing.T) *rig {
 	go func() { runDone <- d.Run(ctx) }()
 	srv := api.New(d, api.WithLogger(slog.New(slog.DiscardHandler)), api.WithHeartbeat(40*time.Millisecond))
 	hs := &http.Server{
-		Handler:     secretRoutes(r.secrets, srv),
+		Handler:     srv,
 		BaseContext: func(net.Listener) context.Context { return ctx },
 	}
 	go func() {

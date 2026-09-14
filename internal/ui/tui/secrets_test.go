@@ -1,72 +1,15 @@
 package tui
 
 import (
-	"encoding/json"
-	"net/http"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/dopeCape/better-nm/internal/api"
 	"github.com/dopeCape/better-nm/internal/client"
 	"github.com/dopeCape/better-nm/internal/core"
-	"github.com/dopeCape/better-nm/internal/fake"
 )
-
-// secretRoutes serves the four secret-agent routes from the fake broker in
-// front of the real API server, until internal/api grows them.
-func secretRoutes(b *fake.SecretBroker, rest http.Handler) http.Handler {
-	mux := http.NewServeMux()
-	fail := func(w http.ResponseWriter, err error) {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(api.StatusFor(err))
-		_ = json.NewEncoder(w).Encode(api.ErrorBody(err))
-	}
-	mux.HandleFunc("GET "+api.Prefix+"/secrets", func(w http.ResponseWriter, r *http.Request) {
-		reqs, _ := b.Pending(r.Context())
-		if reqs == nil {
-			reqs = []core.SecretRequest{}
-		}
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(reqs)
-	})
-	mux.HandleFunc("GET "+api.Prefix+"/secrets/{id}", func(w http.ResponseWriter, r *http.Request) {
-		reqs, _ := b.Pending(r.Context())
-		for _, req := range reqs {
-			if req.ID == r.PathValue("id") {
-				w.Header().Set("Content-Type", "application/json")
-				_ = json.NewEncoder(w).Encode(req)
-				return
-			}
-		}
-		fail(w, core.Errorf(core.KindNotFound, "", "secret request %s is not pending", r.PathValue("id")))
-	})
-	mux.HandleFunc("POST "+api.Prefix+"/secrets/{id}", func(w http.ResponseWriter, r *http.Request) {
-		var a core.SecretAnswer
-		if err := json.NewDecoder(r.Body).Decode(&a); err != nil {
-			fail(w, core.Errorf(core.KindInvalid, "", "bad body: %v", err))
-			return
-		}
-		if err := b.Answer(r.Context(), r.PathValue("id"), a); err != nil {
-			fail(w, err)
-			return
-		}
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(api.OKResponse{OK: true})
-	})
-	mux.HandleFunc("POST "+api.Prefix+"/secrets/{id}/cancel", func(w http.ResponseWriter, r *http.Request) {
-		if err := b.Cancel(r.Context(), r.PathValue("id")); err != nil {
-			fail(w, err)
-			return
-		}
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(api.OKResponse{OK: true})
-	})
-	mux.Handle("/", rest)
-	return mux
-}
 
 func wifiSecret(id, ssid string, wrong bool) core.SecretRequest {
 	return core.SecretRequest{
@@ -312,7 +255,7 @@ func TestSecretPromptAnswerErrorStaysOpen(t *testing.T) {
 	if !h.m.secrets.open() || h.m.secrets.cur.err == nil {
 		t.Fatal("a failed answer keeps the prompt open with the error")
 	}
-	mustContain(t, h.view(), "not pending")
+	mustContain(t, h.view(), "already cancelled")
 	h.pumpResolved("e1")
 	if h.m.secrets.open() {
 		t.Fatal("the resolved event closes it")
