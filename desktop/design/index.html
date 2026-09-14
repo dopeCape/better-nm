@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<title>bnm desktop mockups</title>
+<link rel="stylesheet" href="tokens.css">
+<link rel="stylesheet" href="presets/dark.css" id="preset">
+<link rel="stylesheet" href="base.css">
+<style>
+  body { padding: 48px 32px; max-width: 1080px; margin: 0 auto; }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  .sub { color: var(--subtext); margin-bottom: 32px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 24px; }
+  a.card { display: block; color: inherit; text-decoration: none; border: 1px solid var(--border); border-radius: 4px; overflow: hidden; background: var(--mantle); transition: border-color 120ms; }
+  a.card:hover { border-color: var(--accent); }
+  a.card img { display: block; width: 100%; aspect-ratio: 16/10; object-fit: cover; object-position: top; border-bottom: 1px solid var(--border); }
+  a.card .t { padding: 10px 12px 2px; font-weight: 600; }
+  a.card .d { padding: 0 12px 12px; color: var(--subtext); font-size: 12px; }
+  .states { margin: 24px 0 0; color: var(--subtext); font-size: 12px; }
+  .states code { font-family: var(--mono); color: var(--text); }
+  h2 { font-size: 13px; color: var(--subtext); font-weight: 600; margin: 40px 0 12px; }
+</style>
+</head>
+<body>
+<h1>bnm desktop mockups</h1>
+<div class="sub">Static HTML, real tokens. Use the preset switcher in each page's corner to flip themes.</div>
+<div class="grid">
+  <a class="card" href="01-overview.html"><img src="shots/01-overview-dark-1440.png" alt=""><div class="t">01 Overview</div><div class="d">Connection, VPN switches, quality chart over its baseline, events</div></a>
+  <a class="card" href="02-wifi.html"><img src="shots/02-wifi-dark-1440.png" alt=""><div class="t">02 Wi-Fi</div><div class="d">List with signal bars, detail pane, password and IP settings</div></a>
+  <a class="card" href="03-vpn.html"><img src="shots/03-vpn-dark-1440.png" alt=""><div class="t">03 VPN</div><div class="d">One switch per tunnel, Tailscale section, exit node picker</div></a>
+  <a class="card" href="04-quality.html"><img src="shots/04-quality-dark-1440.png" alt=""><div class="t">04 Quality</div><div class="d">One chart per anchor, state banner, pause and reset</div></a>
+  <a class="card" href="05-speed.html"><img src="shots/05-speed-running-dark-1440.png" alt=""><div class="t">05 Speed</div><div class="d">Big counting number, phase bar, history</div></a>
+  <a class="card" href="06-secret-prompt.html"><img src="shots/06-secret-prompt-dark-1440.png" alt=""><div class="t">06 Password prompt</div><div class="d">The secret-agent dialog over Wi-Fi</div></a>
+  <a class="card" href="07-settings.html"><img src="shots/07-settings-dark-1440.png" alt=""><div class="t">07 Settings</div><div class="d">Theme presets, custom palette, font, density, notifications</div></a>
+  <a class="card" href="08-command-palette.html"><img src="shots/08-command-palette-dark-1440.png" alt=""><div class="t">08 Command palette</div><div class="d">Ctrl K over the overview</div></a>
+</div>
+<h2>States</h2>
+<div class="states">
+  <a href="02-wifi.html?state=empty">Wi-Fi empty</a> · <a href="02-wifi.html?state=error">Wi-Fi wrong password</a> ·
+  <a href="03-vpn.html?state=needs-setup">VPN needs setup</a> ·
+  <a href="04-quality.html?state=learning">Quality learning</a> · <a href="04-quality.html?state=degraded">Quality degraded</a> ·
+  <a href="05-speed.html?state=idle">Speed idle</a> · <a href="05-speed.html?state=result">Speed result</a> ·
+  <a href="07-settings.html?state=palette">Settings palette editor</a>
+</div>
+<h2>Presets</h2>
+<div class="states">
+  <a href="shots/01-overview-catppuccin-mocha-1440.png">Catppuccin Mocha</a> · <a href="shots/01-overview-catppuccin-latte-1440.png">Catppuccin Latte</a> · <a href="shots/01-overview-gruvbox-dark-1440.png">Gruvbox</a> · <a href="shots/01-overview-nord-1440.png">Nord</a> · <a href="shots/01-overview-tokyo-night-1440.png">Tokyo Night</a> · <a href="shots/01-overview-rose-pine-1440.png">Rosé Pine</a> · <a href="shots/01-overview-dracula-1440.png">Dracula</a> · <a href="shots/01-overview-one-dark-1440.png">One Dark</a> · <a href="shots/01-overview-light-1440.png">bnm Light</a> · <a href="DESIGN.md">DESIGN.md</a>
+</div>
+</body>
+</html>
