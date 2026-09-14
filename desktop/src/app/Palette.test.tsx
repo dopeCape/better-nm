@@ -63,6 +63,38 @@ describe("palette UI", () => {
     expect(useUI.getState().paletteOpen).toBe(false);
   });
 
+  it("offers Quit bnm always and Hide to tray only with a tray, opening the config folder through the shell", async () => {
+    render(
+      <QueryClientProvider client={testQueryClient()}>
+        <Palette />
+      </QueryClientProvider>,
+    );
+    act(() => useUI.getState().setPaletteOpen(true));
+    let input = await screen.findByRole("combobox", { name: "Search" });
+    const names = () => screen.getAllByRole("option").map((o) => o.textContent ?? "");
+    await waitFor(() => expect(names().some((n) => n.startsWith("Quit bnm"))).toBe(true));
+    expect(names().some((n) => n.startsWith("Hide to tray"))).toBe(false);
+    await userEvent.type(input, "open desktop config");
+    await userEvent.keyboard("{Enter}");
+    await waitFor(() => expect(shell.calls.some((c) => c.cmd === "config_reveal")).toBe(true));
+    expect(shell.calls.some((c) => c.cmd === "open_url")).toBe(false);
+
+    act(() => useUI.getState().setTrayPresent(true));
+    act(() => useUI.getState().setPaletteOpen(true));
+    input = await screen.findByRole("combobox", { name: "Search" });
+    await waitFor(() => expect(names().some((n) => n.startsWith("Hide to tray"))).toBe(true));
+    await userEvent.type(input, "hide to tray");
+    await userEvent.keyboard("{Enter}");
+    await waitFor(() => expect(shell.calls.some((c) => c.cmd === "window_hide")).toBe(true));
+
+    act(() => useUI.getState().setPaletteOpen(true));
+    input = await screen.findByRole("combobox", { name: "Search" });
+    await userEvent.type(input, "quit bnm");
+    await userEvent.keyboard("{Enter}");
+    await waitFor(() => expect(shell.calls.some((c) => c.cmd === "window_close")).toBe(true));
+    expect(useUI.getState().paletteOpen).toBe(false);
+  });
+
   it("navigates with the arrow keys, goes to a section, and closes on Esc", async () => {
     render(
       <QueryClientProvider client={testQueryClient()}>

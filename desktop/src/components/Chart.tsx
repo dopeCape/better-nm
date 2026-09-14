@@ -17,6 +17,18 @@ export interface ChartProps {
   label?: string;
 }
 
+/**
+ * The y scale: room for the band and the bulk of the samples, not for the odd
+ * spike. One 300 ms outlier over a 20 ms baseline would otherwise flatten the
+ * line and the band into a sliver, and the band is what the chart is about.
+ */
+export function autoYmax(valid: number[], base: number, tol: number): number {
+  const sorted = [...valid].sort((a, b) => a - b);
+  const p95 = sorted.length ? sorted[Math.min(sorted.length - 1, Math.floor(0.95 * (sorted.length - 1)))]! : 0;
+  const max = Math.max(2 * (base + tol), p95 * 1.15, 0.1);
+  return Math.ceil(max * 10) / 10;
+}
+
 export function motionOff(): boolean {
   if (typeof document === "undefined") return true;
   if (document.documentElement.dataset.motion === "0") return true;
@@ -32,13 +44,13 @@ export function Chart({ data, base, tol, w = 400, h = 120, axis = false, ymax: y
     const padB = axis ? 16 : 0;
     const padT = 6;
     const valid = data.filter((v) => v >= 0);
-    const max = Math.max(...valid, base + tol, 0.1);
-    const ymax = ymaxIn ?? Math.ceil(max * 1.15 * 10) / 10;
+    const ymax = ymaxIn ?? autoYmax(valid, base, tol);
     const iw = w - padL;
     const ih = h - padB - padT;
     const n = Math.max(1, data.length - 1);
     const x = (i: number) => padL + (i / n) * iw;
-    const y = (v: number) => padT + ih - (v / ymax) * ih;
+    // Values above the scale sit on the top edge: an outlier reads as "off the chart".
+    const y = (v: number) => Math.max(padT, padT + ih - (v / ymax) * ih);
     let d = "";
     let pen = false;
     data.forEach((v, i) => {

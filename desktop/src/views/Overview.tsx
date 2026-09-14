@@ -213,7 +213,7 @@ function QualitySection({ c }: { c: ReturnType<typeof useConnection> }) {
         </EmptyState>
       )}
       {publicAnchor && series.length > 1 && (
-        <div className="chart-legend mt-2">
+        <div className="chart-legend mt-3">
           <span>
             <i />
             {publicAnchor.anchor} round-trip

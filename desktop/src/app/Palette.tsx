@@ -50,6 +50,7 @@ export function usePaletteItems(): PaletteItem[] {
   const monitor = useMonitor();
   const setSection = useUI((s) => s.setSection);
   const setWifiSelected = useUI((s) => s.setWifiSelected);
+  const trayPresent = useUI((s) => s.trayPresent);
   const add = useAddVpnFromFile();
 
   return useMemo(() => {
@@ -97,7 +98,10 @@ export function usePaletteItems(): PaletteItem[] {
     items.push({ id: "baseline-reset", group: "Actions", icon: "arrow-counter-clockwise", label: "Reset baseline", run: wrap("Reset baseline", () => actions.monitorReset(), [qk.monitor]) });
     items.push({ id: "vpn-add", group: "Actions", icon: "file-arrow-up", label: "Add VPN from file", keys: ["A"], run: () => add.run() });
     items.push({ id: "notify-test", group: "Actions", icon: "bell", label: "Send test notification", run: wrap("Test notification", () => actions.notifyTest()) });
-    items.push({ id: "open-config", group: "Actions", icon: "gear-six", label: "Open desktop config folder", run: wrap("Config", async () => shell.openUrl(`file://${(await shell.configPath()).replace(/\/[^/]*$/, "")}`)) });
+    items.push({ id: "open-config", group: "Actions", icon: "gear-six", label: "Open desktop config folder", run: wrap("Config", () => shell.configReveal()) });
+    // The window is frameless: these are its close button.
+    if (trayPresent) items.push({ id: "hide", group: "Actions", icon: "x", label: "Hide to tray", run: wrap("Hide", () => shell.windowHide()) });
+    items.push({ id: "quit", group: "Actions", icon: "sign-out", label: "Quit bnm", run: wrap("Quit", () => shell.windowClose()) });
 
     for (const n of wifi.data ?? []) {
       if (n.active) continue;
@@ -128,7 +132,7 @@ export function usePaletteItems(): PaletteItem[] {
     const chordFor = (s: Section) => Object.entries(GO_CHORDS).find(([, v]) => v === s)?.[0]?.toUpperCase() ?? "";
     for (const s of SECTIONS) items.push({ id: `go:${s}`, group: "Go to", icon: SECTION_META[s].icon, label: SECTION_META[s].label, keys: ["G", chordFor(s)], run: () => setSection(s) });
     return items;
-  }, [qc, status.data, vpn.data, wifi.data, monitor.data, setSection, setWifiSelected, add]);
+  }, [qc, status.data, vpn.data, wifi.data, monitor.data, setSection, setWifiSelected, trayPresent, add]);
 }
 
 export function Palette() {
