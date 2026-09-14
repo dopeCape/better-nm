@@ -10,7 +10,7 @@ export function TopStrip() {
   const q = qualityBadge(c.monitor);
 
   return (
-    <header className="top">
+    <header className="top" data-tauri-drag-region>
       <div className="crumb">
         {c.loading ? (
           <>

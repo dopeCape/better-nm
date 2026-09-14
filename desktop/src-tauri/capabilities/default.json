@@ -2,8 +2,11 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
   "description": "The main window may call the shell's own commands and listen to its events. Plugins (dialog, opener, notification, window-state, single-instance) are driven from Rust behind those commands, so no plugin permission is exposed to the webview.",
-  "windows": ["main"],
+  "windows": [
+    "main"
+  ],
   "permissions": [
-    "core:default"
+    "core:default",
+    "core:window:allow-start-dragging"
   ]
 }

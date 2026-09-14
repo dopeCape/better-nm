@@ -23,12 +23,6 @@ export function Rail() {
 
   return (
     <aside className="rail">
-      <div className="wordmark">
-        <span className="mark">
-          <Icon name="broadcast" />
-        </span>
-        bnm
-      </div>
       <nav className="nav" aria-label="Sections">
         {SECTIONS.map((s, i) => {
           const m = SECTION_META[s];
