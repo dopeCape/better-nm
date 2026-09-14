@@ -79,16 +79,30 @@ the fake never touches your real state.
 | `stream_start` / `stream_stop` | `stream::StreamRunner` | reads `GET /v1/events/stream`, emits `bnm://change`, `bnm://event`, `bnm://stream`; backoff 0.5 s → 10 s; 45 s of silence (the daemon pings every 15 s) counts as a dead connection. The shell already starts it at launch (the tray needs it); `stream_start` is idempotent. |
 | `speed_start {opts}` / `speed_cancel` | `stream::SpeedRunner` | `POST /v1/speed` as SSE, emits `bnm://speed` `{phase: progress\|result\|error}`; a second start rejects `speed-running`; cancel aborts the connection (which cancels the daemon-side test) and emits `{phase: "error", error: "cancelled"}`. |
 | `config_get` / `config_set {patch}` / `config_path` | `config::ConfigStore` | see below |
-| `pick_vpn_file` | `tauri-plugin-dialog` | filter `.conf`/`.ovpn`, refuses files > 1 MiB, `null` on cancel |
+| `pick_vpn_file` | `tauri-plugin-dialog` | filter `.conf`/`.ovpn`; regular files only (a FIFO would block the command), ≤ 1 MiB read through a bounded reader, UTF-8; `null` on cancel |
 | `open_url {url}` | `tauri-plugin-opener` | http(s) only |
 | `daemon_status` | `daemon::Client::status` | `{running, socket, pid?, version?, unit_installed, unit_active}` without auto-start |
-| `daemon_install` | `daemon::Client::install` | writes `~/.config/systemd/user/bnmd.service` with the absolute `bnmd` path, stops a hand-started daemon, `systemctl --user daemon-reload`, `enable --now`, waits for the socket; rejects with systemctl's text |
+| `daemon_install` | `daemon::Client::install` | writes `~/.config/systemd/user/bnmd.service` with the absolute `bnmd` path (quoted when it contains spaces), stops a hand-started daemon, `systemctl --user daemon-reload`, `enable --now`, waits for the socket; rejects with systemctl's text. Refuses a path inside an AppImage mount |
 | `daemon_restart` | `daemon::Client::restart` | `systemctl --user stop/start` when the unit is active on the default socket, else SIGTERM the pid from `bnmd.pid` and respawn; waits for the socket; the stream reconnects by itself |
 | `window_show` | `show_main_window` | show + unminimize + focus |
+| `window_hide` | `hide_main_window` | hide; rejects `no-tray` without a tray icon |
+| `window_close` | `AppHandle::exit(0)` | quit (the frameless window's close button lives in the palette) |
+| `tray_present` | `tray::present` | whether a tray icon exists right now |
+| `config_reveal` | `tauri-plugin-opener` `open_path` | opens the config directory in the file manager |
 | `notify {title, body?}` | `tauri-plugin-notification` | |
 
 Start/stop/restart/install and the auto-start path share one lock, so the stream
 reader (which also auto-starts on each reconnect) never races a restart into two daemons.
+
+### Running from an AppImage
+
+The AppImage runtime sets `APPIMAGE` (the file) and `APPDIR` (the squashfs mount under
+`/tmp/.mount_*`). `daemon::Whereabouts::find_daemon` then treats "next to the
+executable" as next to the `.AppImage` file, skips `PATH` entries under the mount, and
+never returns a binary from inside it: a bnmd started from there would lose its pages
+when the mount goes away with the app, and a unit pointing there would fail at the next
+boot. `daemon_install` also refuses a `BNM_DAEMON` inside the mount. Nothing bundles
+`bnmd` into the AppImage today (no `externalBin`); users get it from the `bnm` package.
 
 ### Config
 
@@ -115,8 +129,11 @@ block is preserved; comments beside keys are lost on the first write. The patch 
 rejected (no write) when it introduces a new error.
 
 The watcher (`notify`, inotify) watches the *directory*, filters to the file name and
-ignores access events, debounces 150 ms, then reloads and emits `bnm://config`. The
-`tray:` setting is re-applied on every change (a tray is built or removed live).
+ignores access events, debounces 150 ms, then reloads and emits `bnm://config`. When
+`config.yaml` is a symlink the target's directory is watched too, and writes go through
+the link (temp file beside the target, rename over it), so a dotfile-managed config keeps
+working. The `tray:` setting is re-applied on every change (a tray is built or removed
+live; removing it while the window is hidden shows the window).
 
 ### Tray
 
@@ -127,6 +144,12 @@ tray. `on` forces it, `off` disables it. Menu: connection line, `Wi-Fi on/off` c
 item, one check item per VPN (disabled unless `writable` and in a state bnm can flip),
 `Quality: <verdict>`, separator, `Open bnm`, `Quit`. It refreshes from `status`, `wifi`,
 `vpn`, `monitor` change hints and on stream connect/disconnect, coalescing bursts.
+`set_menu` blocks until the GTK main thread has run it, and that thread also takes the
+tray mutex (window close, menu events), so `refresh` clones the icon handle out of the
+lock before calling it. Menu events go through one `App::on_menu_event` listener
+registered at setup, not one per built tray, and removal goes through
+`remove_tray_by_id` (the app's registry keeps its own handle; dropping ours alone would
+leave the icon on screen).
 The icon is a monochrome (light, alpha-preserving) variant of the app icon computed
 at startup from `icons/128x128.png`. Closing the window hides it when a tray exists and
 `close_to_tray` is true; otherwise the app quits.

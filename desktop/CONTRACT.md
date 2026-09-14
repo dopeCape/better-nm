@@ -79,7 +79,7 @@ import: ""             # path to a pywal/wallust colors.json; same precedence as
 
 Commands:
 - `invoke<DesktopConfig>("config_get")` returns the effective config (defaults merged, paths expanded, `base16`/`import` files already resolved into `custom` tokens, plus `{source_path: string, errors: string[]}` for unparsable keys).
-- `invoke("config_set", { patch })` merges a partial config into the file and rewrites it (comments in the header preserved; user comments elsewhere may be lost, say so in the docs). The watcher then emits `bnm://config`.
+- `invoke("config_set", { patch })` merges a partial config into the file and rewrites it (comments in the header preserved; user comments elsewhere may be lost, say so in the docs). The watcher then emits `bnm://config`. A `config.yaml` that is a symlink (stow, chezmoi, home-manager) is written through: the link stays a link and the target is replaced atomically; a read-only target rejects with the OS error.
 - `invoke<string>("config_path")`.
 
 Resolution rules the shell applies (so the frontend can use `custom` as the effective palette for every theme):
@@ -87,23 +87,27 @@ Resolution rules the shell applies (so the frontend can use `custom` as the effe
 - `accent` (any theme) replaces `custom.accent` and re-derives `custom.selection` (accent at 15 % alpha); a `custom.accent` without a `custom.selection` does the same.
 - Relative `base16`/`import` paths resolve against the config directory; `~/` expands. An unreadable or malformed file adds an entry to `errors` and leaves the previous layer in place.
 - Unknown keys, values outside the allowed sets, and non-`#rrggbb[aa]` colours each add one entry to `errors`; the key keeps its default. `config_set` rejects (and does not write) a patch that would introduce a new error; `null` in a patch removes the key. The shell emits `bnm://config` itself right after a successful `config_set`, and the watcher emits again when inotify reports the rewrite: expect two identical events.
-- `tray` changes apply live: the tray is built or removed on the next `bnm://config`.
+- `tray` changes apply live: the tray is built or removed on the next `bnm://config`. Removing the tray while the window is hidden shows the window again.
 
 The TypeScript type `DesktopConfig` in `desktop/src/config/types.ts` is the source of truth for the frontend; the Rust `struct DesktopConfig` in `desktop/src-tauri/src/config.rs` must serialise to the same JSON (snake_case keys as above).
 
 ## Other shell services
 
-- `invoke<{name: string, content: string} | null>("pick_vpn_file")`: native file dialog filtered to `.conf`/`.ovpn`, returns the file content (≤ 1 MiB) or null on cancel.
-- `invoke("open_url", { url })`: opens in the default browser (Tailscale login).
+- `invoke<{name: string, content: string} | null>("pick_vpn_file")`: native file dialog filtered to `.conf`/`.ovpn`, returns the file content (a regular file, ≤ 1 MiB, UTF-8; anything else rejects with a plain message) or null on cancel.
+- `invoke("open_url", { url })`: opens an `http(s)://` URL in the default browser (Tailscale login); anything else rejects.
 - `invoke<DaemonStatus>("daemon_status")` → `{running: boolean, socket: string, pid?: number, version?: string, unit_installed: boolean, unit_active: boolean}`.
-- `invoke("daemon_install")`: same steps as `bnm daemon install` (writes the user unit, `systemctl --user daemon-reload`, `enable --now`); rejects with the systemctl error text.
+- `invoke("daemon_install")`: same steps as `bnm daemon install` (writes the user unit, `systemctl --user daemon-reload`, `enable --now`); rejects with the systemctl error text. The unit's `ExecStart` is the `bnmd` the shell would auto-start: `BNM_DAEMON`, then next to the executable, then `PATH`. From an AppImage "next to the executable" means next to the `.AppImage` file and the mounted squashfs is never used (neither for the unit nor for auto-start): it is gone when the app exits.
 - `invoke("daemon_restart")`: `systemctl --user stop`/`start` when the unit is active on the default socket, else SIGTERM to the pid in `bnmd.pid` beside the socket and a fresh detached spawn; waits for the socket and re-runs the version check. The stream reconnects by itself (`bnm://stream` false, then true).
 - `invoke("window_show")`: shows and focuses the main window (secret prompts call this).
+- `invoke("window_hide")`: hides the window to the tray (the palette's "Hide to tray"). Rejects with `"no-tray"` when no tray icon exists, since nothing could bring the window back; the frontend offers the action only when `tray_present` is true.
+- `invoke("window_close")`: quits the app (exit code 0). The window is frameless, so the palette's "Quit bnm" is the close button. It ignores `close_to_tray` on purpose; hiding is `window_hide`.
+- `invoke<boolean>("tray_present")`: whether a tray icon exists right now (`tray: auto` depends on the desktop; `tray` changes apply live, so re-ask after every `bnm://config`).
+- `invoke("config_reveal")`: opens the directory holding the desktop config file in the file manager (`open_url` is http(s) only).
 - `invoke("notify", { title, body? })`: only for the frontend's own toasts if ever needed; daemon notifications stay in the daemon.
 
 ## Tray
 
-Owned by the shell, no frontend involvement. Built when a StatusNotifier host exists and `tray != off` (or always when `tray: on`). Menu: connection line (disabled item), `Wi-Fi on/off` (check item), one check item per VPN (from `/v1/vpn`), `Quality: <verdict>` (disabled), separator, `Open bnm`, `Quit`. The shell refreshes it from `bnm://change` hints of kind `status`, `wifi`, `vpn`, `monitor`, and performs actions by calling the API itself. Closing the window hides it when a tray exists and `close_to_tray` is true; otherwise quits.
+Owned by the shell; the frontend only asks `tray_present` and calls `window_hide`. Built when a StatusNotifier host exists and `tray != off` (or always when `tray: on`). Menu: connection line (disabled item), `Wi-Fi on/off` (check item), one check item per VPN (from `/v1/vpn`), `Quality: <verdict>` (disabled), separator, `Open bnm`, `Quit`. The shell refreshes it from `bnm://change` hints of kind `status`, `wifi`, `vpn`, `monitor`, and performs actions by calling the API itself. Closing the window hides it when a tray exists and `close_to_tray` is true; otherwise quits.
 
 ## Window
 

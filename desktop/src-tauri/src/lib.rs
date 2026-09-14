@@ -68,6 +68,13 @@ pub fn show_main_window(app: &AppHandle) {
     }
 }
 
+/// Hides the main window (only sensible with a tray to bring it back).
+pub fn hide_main_window(app: &AppHandle) {
+    if let Some(w) = app.get_webview_window(MAIN_WINDOW) {
+        let _ = w.hide();
+    }
+}
+
 fn init_tracing() {
     let filter =
         EnvFilter::try_from_env("BNM_DESKTOP_LOG").unwrap_or_else(|_| EnvFilter::new("info"));
@@ -108,6 +115,10 @@ pub fn run() {
             commands::daemon_install,
             commands::daemon_restart,
             commands::window_show,
+            commands::window_hide,
+            commands::window_close,
+            commands::tray_present,
+            commands::config_reveal,
             commands::notify,
         ])
         .setup(|app| {
@@ -138,6 +149,12 @@ pub fn run() {
                     Err(e) => warn!(error = %e, "config watcher not started"),
                 }
             }
+
+            // One menu listener for the life of the app; the tray may be built and
+            // removed many times (`tray:` changes live) and must not stack listeners.
+            app.on_menu_event(|app, event| {
+                tray::on_menu(app, event.id().as_ref().to_string());
+            });
 
             // Tray, per config and the presence of a StatusNotifier host.
             tray::apply_setting(&handle, &cfg.tray);

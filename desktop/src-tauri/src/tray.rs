@@ -319,7 +319,10 @@ fn build_menu(app: &AppHandle, m: &TrayModel) -> tauri::Result<Menu<tauri::Wry>>
     Ok(menu)
 }
 
-/// Creates the tray icon with an initial (unreachable) menu.
+/// Creates the tray icon with an initial (unreachable) menu. Menu events are
+/// delivered to `on_menu` through the one global listener `lib.rs` registers at
+/// setup: a listener per build would stack up as `tray:` is toggled and fire an
+/// action once per past tray (two Wi-Fi toggles cancel out).
 pub fn build(app: &AppHandle) -> tauri::Result<Tray> {
     let model = TrayModel::default();
     let menu = build_menu(app, &model)?;
@@ -329,10 +332,6 @@ pub fn build(app: &AppHandle) -> tauri::Result<Tray> {
         .tooltip("bnm")
         .menu(&menu)
         .show_menu_on_left_click(true)
-        .on_menu_event(|app, event| {
-            let id = event.id().as_ref().to_string();
-            on_menu(app, id);
-        })
         .build(app)?;
     info!("tray created");
     Ok(Tray {
@@ -341,7 +340,9 @@ pub fn build(app: &AppHandle) -> tauri::Result<Tray> {
     })
 }
 
-fn on_menu(app: &AppHandle, id: String) {
+/// Handles a tray menu item by id. Runs on the GTK main thread, so anything that
+/// touches the daemon is spawned onto the runtime and the tray lock is taken there.
+pub fn on_menu(app: &AppHandle, id: String) {
     match id.as_str() {
         "open" => crate::show_main_window(app),
         "quit" => {
@@ -440,13 +441,24 @@ pub async fn refresh(app: &AppHandle) {
             return;
         }
     };
+    // `set_menu` and `set_tooltip` block until the GTK main thread runs them. That
+    // thread also takes `state.tray` (window close, menu events), so the lock must
+    // not be held across the call: clone the handle out, release, then apply.
+    let icon = state
+        .tray
+        .lock()
+        .ok()
+        .and_then(|g| g.as_ref().map(|t| t.icon.clone()));
+    let Some(icon) = icon else {
+        return;
+    };
+    if let Err(e) = icon.set_menu(Some(menu)) {
+        warn!(error = %e, "tray: set menu");
+    }
+    let _ = icon.set_tooltip(Some(&model.connection));
     let guard = state.tray.lock();
-    if let Ok(guard) = guard {
-        if let Some(t) = guard.as_ref() {
-            if let Err(e) = t.icon.set_menu(Some(menu)) {
-                warn!(error = %e, "tray: set menu");
-            }
-            let _ = t.icon.set_tooltip(Some(&model.connection));
+    if let Ok(g) = guard {
+        if let Some(t) = g.as_ref() {
             if let Ok(mut m) = t.model.lock() {
                 *m = model;
             }
@@ -471,11 +483,32 @@ pub fn apply_setting(app: &AppHandle, setting: &str) {
             Err(e) => warn!(error = %e, "tray: cannot create"),
         }
     } else if !want && have {
-        if let Ok(mut g) = state.tray.lock() {
-            *g = None;
+        let old = state.tray.lock().ok().and_then(|mut g| g.take());
+        // The app's tray registry holds its own handle; dropping ours alone leaves
+        // the icon on screen. Remove it there, and let the GTK objects die on the
+        // main thread.
+        let removed = app.remove_tray_by_id(TRAY_ID);
+        let _ = app.run_on_main_thread(move || {
+            drop(removed);
+            drop(old);
+        });
+        // A window hidden "to the tray" has no way back once the tray is gone.
+        if let Some(w) = app.get_webview_window(crate::MAIN_WINDOW) {
+            if !w.is_visible().unwrap_or(true) {
+                crate::show_main_window(app);
+            }
         }
         info!("tray removed (tray: {setting})");
     }
+}
+
+/// Whether a tray icon exists right now (the frontend offers "Hide to tray" only then).
+pub fn present(app: &AppHandle) -> bool {
+    app.state::<AppState>()
+        .tray
+        .lock()
+        .map(|t| t.is_some())
+        .unwrap_or(false)
 }
 
 #[cfg(test)]
