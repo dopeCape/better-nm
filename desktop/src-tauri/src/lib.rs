@@ -9,6 +9,7 @@
 pub mod commands;
 pub mod config;
 pub mod daemon;
+pub mod nixcompat;
 pub mod stream;
 pub mod tray;
 
@@ -89,6 +90,10 @@ fn init_tracing() {
 pub fn run() {
     init_tracing();
     info!(version = env!("CARGO_PKG_VERSION"), "bnm desktop starting");
+    let added = nixcompat::fix_gsettings_env();
+    if !added.is_empty() {
+        info!(dirs = ?added, "nix: added GSettings schema dirs to XDG_DATA_DIRS");
+    }
     daemon::log_socket_discovery();
 
     tauri::Builder::default()
