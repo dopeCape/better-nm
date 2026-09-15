@@ -35,29 +35,100 @@ Everything runs as your user. NetworkManager through polkit, Tailscale through i
 
 ## Install
 
-Grab a package from [releases](https://github.com/dopeCape/better-nm/releases):
+Two packages: `bnm` (CLI, TUI and the daemon; you always want this one) and `bnm-desktop` (the app; optional, depends on `bnm`). Both are on the [releases page](https://github.com/dopeCape/better-nm/releases). Replace `0.1.0` below with the version you want; `amd64` / `x86_64` become `arm64` / `aarch64` on ARM.
 
-| | |
-|---|---|
-| CLI + TUI + daemon | `bnm` as `.deb`, `.rpm`, Arch package, or a static tarball. AUR: `bnm-bin` |
-| Desktop app | `bnm-desktop` as AppImage, `.deb` or `.rpm` (x86_64 and aarch64) |
-| Nix | `nix run github:dopeCape/better-nm`, or the flake's NixOS / Home Manager module: `services.bnm.enable = true; services.bnm.desktop = true;` |
+### Arch
 
-Then, optionally, make the daemon a user service so it keeps collecting baselines when nothing is open:
-
-```
-bnm daemon install
+```sh
+yay -S bnm-bin                       # or paru; the AUR package tracks releases
+# desktop app, until bnm-desktop-bin lands on the AUR:
+curl -LO https://github.com/dopeCape/better-nm/releases/download/v0.1.0/bnm-desktop_0.1.0_amd64.AppImage
+chmod +x bnm-desktop_0.1.0_amd64.AppImage && ./bnm-desktop_0.1.0_amd64.AppImage
 ```
 
-Without that step `bnm` just starts the daemon on demand the first time you run it. Either way it lives on the socket at `$XDG_RUNTIME_DIR/bnm/bnmd.sock`.
+Or skip the AUR and install the package straight from the release:
 
-From source you need Go 1.25 for the CLI and daemon, and Rust + Node 24 + WebKitGTK 4.1 for the desktop app (`nix develop` has all of it):
-
+```sh
+curl -LO https://github.com/dopeCape/better-nm/releases/download/v0.1.0/bnm_0.1.0_linux_amd64.pkg.tar.zst
+sudo pacman -U bnm_0.1.0_linux_amd64.pkg.tar.zst
 ```
+
+### Debian, Ubuntu, Pop!_OS, Mint
+
+```sh
+curl -LO https://github.com/dopeCape/better-nm/releases/download/v0.1.0/bnm_0.1.0_linux_amd64.deb
+curl -LO https://github.com/dopeCape/better-nm/releases/download/v0.1.0/bnm-desktop_0.1.0_amd64.deb
+sudo apt install ./bnm_0.1.0_linux_amd64.deb ./bnm-desktop_0.1.0_amd64.deb
+```
+
+The deb enables the daemon as a user service on install and drops in `/usr/lib/sysctl.d/50-bnm.conf` so ping sockets work without root (Debian and Ubuntu ship with them off). Until you reboot or run `sudo sysctl --system`, probes fall back to TCP timing, which is fine.
+
+### Fedora, RHEL, openSUSE
+
+```sh
+curl -LO https://github.com/dopeCape/better-nm/releases/download/v0.1.0/bnm_0.1.0_linux_amd64.rpm
+curl -LO https://github.com/dopeCape/better-nm/releases/download/v0.1.0/bnm-desktop-0.1.0-1.x86_64.rpm
+sudo dnf install ./bnm_0.1.0_linux_amd64.rpm ./bnm-desktop-0.1.0-1.x86_64.rpm   # zypper on openSUSE
+systemctl --user enable --now bnmd
+```
+
+### NixOS and Home Manager
+
+Try it without installing anything:
+
+```sh
+nix run github:dopeCape/better-nm -- status
+nix run github:dopeCape/better-nm#bnm-desktop
+```
+
+As a module, add the flake as an input and enable the service. The NixOS module installs the packages for every user and starts `bnmd` as a user unit; the Home Manager module does the same for one user.
+
+```nix
+# flake.nix
+inputs.bnm.url = "github:dopeCape/better-nm";
+
+# configuration.nix (NixOS) or home.nix (Home Manager)
+imports = [ inputs.bnm.nixosModules.default ];   # or inputs.bnm.homeModules.default
+services.bnm = {
+  enable = true;
+  desktop = true;      # also install bnm-desktop
+};
+services.tailscale.extraSetFlags = [ "--operator=you" ];   # see the Tailscale note below
+```
+
+### Any distro, no package manager
+
+The CLI and daemon are static binaries. Drop them anywhere on `PATH`:
+
+```sh
+curl -L https://github.com/dopeCape/better-nm/releases/download/v0.1.0/bnm_0.1.0_linux_amd64.tar.gz | tar xz
+install -Dm755 bnm bnmd ~/.local/bin/
+bnm daemon install       # optional: run bnmd as a systemd user service
+```
+
+The desktop app as an AppImage bundles WebKitGTK, so it only needs `bnmd` on `PATH` (or next to the AppImage file):
+
+```sh
+curl -LO https://github.com/dopeCape/better-nm/releases/download/v0.1.0/bnm-desktop_0.1.0_amd64.AppImage
+chmod +x bnm-desktop_0.1.0_amd64.AppImage
+./bnm-desktop_0.1.0_amd64.AppImage
+```
+
+### From source
+
+Go 1.25 for the CLI and daemon. The desktop app needs Rust, Node 24 with pnpm, and the WebKitGTK 4.1, GTK 3, libayatana-appindicator, librsvg and libsoup 3 headers (`apt install libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev libsoup-3.0-dev`; `nix develop` has everything).
+
+```sh
+git clone https://github.com/dopeCape/better-nm && cd better-nm
 make build            # bin/bnm, bin/bnmd
 make desktop          # bin/bnm-desktop
-make install          # ~/.local/bin + a launcher entry
+make install          # copies all three to ~/.local/bin and adds a launcher entry
+make desktop-bundle   # AppImage, deb and rpm under desktop/src-tauri/target/release/bundle/
 ```
+
+### After installing
+
+Nothing else is required. `bnm` starts the daemon on demand the first time you run it; `bnm daemon install` makes it a systemd user service so baselines keep building while nothing is open. The socket lives at `$XDG_RUNTIME_DIR/bnm/bnmd.sock`. For Tailscale control there's one `sudo` you have to run yourself, once; it's in the Tailscale section below.
 
 ## The three surfaces
 
