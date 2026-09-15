@@ -647,13 +647,15 @@ func (s *Server) events(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) eventStream(w http.ResponseWriter, r *http.Request) {
+	// Subscribe before the headers go out: a client that has seen the response
+	// must not miss an event published a moment later.
+	ch, cancel := s.d.Subscribe()
+	defer cancel()
 	sse, err := newSSE(w)
 	if err != nil {
 		writeError(w, err)
 		return
 	}
-	ch, cancel := s.d.Subscribe()
-	defer cancel()
 	_ = sse.comment("connected")
 	hb := time.NewTicker(s.heartbeat)
 	defer hb.Stop()
