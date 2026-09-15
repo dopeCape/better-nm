@@ -36,6 +36,7 @@ jobs:
   desktop:
     needs: goreleaser
     strategy:
+      fail-fast: false
       matrix:
         include:
           - runner: ubuntu-22.04
@@ -51,9 +52,9 @@ jobs:
       - name: Tauri Linux deps
         run: sudo apt-get update -q && sudo apt-get install -y -q libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev libsoup-3.0-dev patchelf file xdg-utils
       - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: desktop/src-tauri
+      # No rust-cache here on purpose: a cache restored from the CI job left cargo
+      # with fingerprints but no rlibs ("can't find crate for tauri"). A cold
+      # release build costs a few minutes and happens once per tag.
       - uses: pnpm/action-setup@v4
         with:
           package_json_file: desktop/package.json
