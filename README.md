@@ -35,7 +35,7 @@ Everything runs as your user. NetworkManager through polkit, Tailscale through i
 
 ## Install
 
-Two packages: `bnm` (CLI, TUI and the daemon; you always want this one) and `bnm-desktop` (the app; optional, depends on `bnm`). Both are on the [releases page](https://github.com/dopeCape/better-nm/releases). Replace `0.1.0` below with the version you want; `amd64` / `x86_64` become `arm64` / `aarch64` on ARM.
+Two packages: `bnm` (CLI, TUI and the daemon; you always want this one) and `bnm-desktop` (the app; optional, depends on `bnm`). Both are on the [releases page](https://github.com/dopeCape/better-nm/releases). Replace `0.1.0` below with the version you want; on ARM the CLI packages use `arm64`, the desktop rpm and AppImage use `aarch64`, and the desktop deb uses `arm64`.
 
 ### Arch
 
