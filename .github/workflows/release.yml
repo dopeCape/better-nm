@@ -2,6 +2,7 @@ name: release
 on:
   push:
     tags: ["v*"]
+  workflow_dispatch: # re-run on an existing tag: pick the tag as the ref
 
 permissions:
   contents: write
