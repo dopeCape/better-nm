@@ -63,18 +63,18 @@ func TestAdapterListRunning(t *testing.T) {
 		t.Fatal("no TailscaleInfo")
 	}
 	if info.BackendState != StateRunning || info.Version != "1.98.10" || !info.OperatorOK || !info.AcceptDNS ||
-		info.MagicDNS != "tailabc12.ts.net" || info.Tailnet != "user@example.com" || info.SelfName != "nixos-1" ||
+		info.MagicDNS != "tailabc12.ts.net" || info.Tailnet != "user@example.com" || info.SelfName != "homeserver" ||
 		info.ControlURL != "https://controlplane.tailscale.com" || len(info.SelfIPs) != 2 || info.ExitNodeOn {
 		t.Errorf("info = %+v", info)
 	}
 	if len(info.Peers) != 2 {
 		t.Fatalf("peers = %+v", info.Peers)
 	}
-	// Sorted by name: nixos, xiaomi-pad-6.
+	// Sorted by name: nixos, tablet.
 	if info.Peers[0].Name != "nixos" || !info.Peers[0].ExitNodeOption || info.Peers[0].Online || info.Peers[0].LastSeen.IsZero() {
 		t.Errorf("peer0 = %+v", info.Peers[0])
 	}
-	if info.Peers[1].Name != "xiaomi-pad-6" || info.Peers[1].HostName != "Xiaomi Pad 6" || info.Peers[1].OS != "android" || !info.Peers[1].Online {
+	if info.Peers[1].Name != "tablet" || info.Peers[1].HostName != "tablet" || info.Peers[1].OS != "android" || !info.Peers[1].Online {
 		t.Errorf("peer1 = %+v", info.Peers[1])
 	}
 	// The writable probe is one empty PATCH.
@@ -256,7 +256,7 @@ func TestAdapterTailscaleControl(t *testing.T) {
 		}
 	}
 	// A peer without ExitNodeOption is refused.
-	if err := ctl.SetExitNode(ctx, "xiaomi-pad-6", false); err == nil || !strings.Contains(err.Error(), "does not offer") {
+	if err := ctl.SetExitNode(ctx, "tablet", false); err == nil || !strings.Contains(err.Error(), "does not offer") {
 		t.Errorf("SetExitNode on non-exit peer: %v", err)
 	}
 	if err := ctl.SetExitNode(ctx, "ghost", false); err == nil {

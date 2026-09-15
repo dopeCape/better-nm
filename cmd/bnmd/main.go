@@ -137,12 +137,17 @@ func fakeOptions() daemon.Options {
 	nm.UseSecrets(secrets)
 	ovpn := fake.NewNMVPN()
 	ovpn.Secrets = secrets
+	ts := fake.NewTailscale()
+	_ = ts.Connect(context.Background(), "tailscale") // a lived-in world: Tailscale up
+	mon := fake.NewMonitor()
+	st := fake.NewStore()
+	seedFakeHistory(mon, st)
 	return daemon.Options{
 		NM:        nm,
 		Secrets:   secrets,
-		VPN:       fake.NewVPNRegistry(fake.NewTailscale(), fake.NewWireGuard(), ovpn),
-		Monitor:   fake.NewMonitor(),
-		Store:     fake.NewStore(),
+		VPN:       fake.NewVPNRegistry(ts, fake.NewWireGuard(), ovpn),
+		Monitor:   mon,
+		Store:     st,
 		Speed:     &fake.SpeedTester{Delay: 300 * time.Millisecond}, // so progress is visible
 		Notifier:  fake.NewNotifier(),
 		Diag:      fake.NewDiag(),
@@ -150,8 +155,47 @@ func fakeOptions() daemon.Options {
 	}
 }
 
-// realOptions wires the production backends.
-//
+// seedFakeHistory gives the fake world an hour of plausible probe samples with a
+// learned baseline, and a few events, so the surfaces have something to draw.
+func seedFakeHistory(mon *fake.Monitor, st *fake.Store) {
+	const key = "wifi:HomeNet"
+	now := time.Now()
+	rtt := map[string]float64{"gateway": 1.2, "1.1.1.1": 14.0, "8.8.8.8": 15.5}
+	for i := 120; i >= 0; i-- {
+		t := now.Add(-time.Duration(i) * 30 * time.Second)
+		// a gentle wobble plus one short bump twenty minutes ago
+		wobble := float64((i*7)%5) * 0.3
+		bump := 0.0
+		if i > 38 && i < 44 {
+			bump = 9
+		}
+		for n, anchor := range []string{"gateway", "1.1.1.1", "8.8.8.8"} {
+			s := core.Sample{Time: t, NetworkKey: key, Anchor: anchor, RTTms: rtt[anchor] + wobble + bump, Method: "icmp", DNSms: -1}
+			if n == 0 {
+				s.DNSms = 18 + wobble
+			}
+			mon.AddSample(s)
+			_ = st.AddSample(context.Background(), s)
+		}
+	}
+	mon.SetStatus(core.MonitorStatus{
+		NetworkKey: key, State: core.BaselineOK, Interval: 30 * time.Second, LastSample: now,
+		Anchors: []core.Baseline{
+			{NetworkKey: key, Anchor: "gateway", State: core.BaselineOK, SampleCount: 121, BaselineRTT: 1.2, CurrentRTT: 1.4, CurrentDNS: 18, UpdatedAt: now},
+			{NetworkKey: key, Anchor: "1.1.1.1", State: core.BaselineOK, SampleCount: 121, BaselineRTT: 14.0, CurrentRTT: 14.6, UpdatedAt: now},
+			{NetworkKey: key, Anchor: "8.8.8.8", State: core.BaselineOK, SampleCount: 121, BaselineRTT: 15.5, CurrentRTT: 15.9, UpdatedAt: now},
+		},
+	})
+	for _, e := range []core.Event{
+		{Time: now.Add(-50 * time.Minute), Type: core.EventConnected, NetworkKey: key, Title: "Connected to HomeNet", Body: "192.168.1.42 via wlan0", Urgency: "low"},
+		{Time: now.Add(-49 * time.Minute), Type: core.EventVPNUp, Title: "Tailscale connected", Body: "1 peer online", Urgency: "low"},
+		{Time: now.Add(-21 * time.Minute), Type: core.EventDegraded, NetworkKey: key, Title: "HomeNet is slower than usual", Body: "Latency to 1.1.1.1 is 23 ms, usually 14 ms", Urgency: "normal"},
+		{Time: now.Add(-16 * time.Minute), Type: core.EventRecovered, NetworkKey: key, Title: "HomeNet is back to normal", Body: "Round-trip back within baseline", Urgency: "low"},
+	} {
+		_ = st.AddEvent(context.Background(), e)
+	}
+}
+
 // realOptions wires the production backends. Everything runs unprivileged: NM over
 // the system bus with polkit, Tailscale via its LocalAPI socket, WireGuard and plugin
 // VPNs as NM profiles, probes on ping sockets (TCP fallback), history in SQLite.

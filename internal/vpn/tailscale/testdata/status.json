@@ -12,7 +12,7 @@
 		"ID": "nDDAL5zcst11CNTRL",
 		"PublicKey": "nodekey:9e94112f940dda46a65594a06a2cde627d7e0c84db2a78682bc94a00aa933432",
 		"HostName": "nixos",
-		"DNSName": "nixos-1.tailabc12.ts.net.",
+		"DNSName": "homeserver.tailabc12.ts.net.",
 		"OS": "linux",
 		"UserID": 935598283501435,
 		"TailscaleIPs": [
@@ -65,7 +65,7 @@
 		"MagicDNSEnabled": true
 	},
 	"CertDomains": [
-		"nixos-1.tailabc12.ts.net"
+		"homeserver.tailabc12.ts.net"
 	],
 	"Peer": {
 		"nodekey:1aecad8ae657c9836987a4360d8c5d7adf180a26f1bab5d7b1ff203328654622": {
@@ -109,8 +109,8 @@
 		"nodekey:9615ab7460f029236f358a8ae32ee5ec10d964b2bff5b9b52cf4ec65344f7f1b": {
 			"ID": "nK3mPadCNTRL",
 			"PublicKey": "nodekey:9615ab7460f029236f358a8ae32ee5ec10d964b2bff5b9b52cf4ec65344f7f1b",
-			"HostName": "Xiaomi Pad 6",
-			"DNSName": "xiaomi-pad-6.tailabc12.ts.net.",
+			"HostName": "tablet",
+			"DNSName": "tablet.tailabc12.ts.net.",
 			"OS": "android",
 			"UserID": 935598283501435,
 			"TailscaleIPs": [

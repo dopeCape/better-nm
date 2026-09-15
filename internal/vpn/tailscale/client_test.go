@@ -20,7 +20,7 @@ func TestClientStatusAndPrefs(t *testing.T) {
 	if st.BackendState != StateRunning || st.Version != "1.98.10" {
 		t.Errorf("status = %+v", st)
 	}
-	if st.Self == nil || st.Self.ID != "nDDAL5zcst11CNTRL" || st.Self.DNSName != "nixos-1.tailabc12.ts.net." {
+	if st.Self == nil || st.Self.ID != "nDDAL5zcst11CNTRL" || st.Self.DNSName != "homeserver.tailabc12.ts.net." {
 		t.Errorf("self = %+v", st.Self)
 	}
 	if len(st.Peer) != 2 {

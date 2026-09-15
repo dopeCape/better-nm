@@ -127,8 +127,8 @@ the backend attached):
 
 ```
    NAME       KIND       BACKEND    STATE         DETAIL
-●  Tailscale  Tailscale  tailscale  connected     100.64.0.10 · Tailscale is r…
-○  tejas      OpenVPN    nm-vpn     disconnected  vpn.office.example:1194
+●  Tailscale  Tailscale  tailscale  connected     100.64.0.1 · up since 14:31
+○  office     OpenVPN    nm-vpn     disconnected  vpn.office.example:1194
 ```
 
 `up`, `down` and `toggle` act on one VPN and wait (up to 20 s) for it to leave `connecting`, then
